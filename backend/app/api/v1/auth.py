@@ -84,6 +84,32 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_async_ses
     }
 
 
+@router.get("/check")
+async def check_availability(email: str | None = None, phone: str | None = None, db: AsyncSession = Depends(get_async_session)):
+    """Return availability for email and/or phone. Response format: {"email_available": bool, "phone_available": bool}
+    At least one of email or phone must be provided.
+    """
+    if not email and not phone:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Provide email or phone to check.")
+
+    result = {}
+    if email:
+        normalized_email = email.lower().strip()
+        r = await db.execute(select(User).where(User.email == normalized_email))
+        result["email_available"] = r.scalar_one_or_none() is None
+
+    if phone:
+        normalized_phone = normalize_phone(phone)
+        # If phone normalization yields None (no digits), treat as not available input
+        if normalized_phone:
+            r = await db.execute(select(User).where(User.phone == normalized_phone))
+            result["phone_available"] = r.scalar_one_or_none() is None
+        else:
+            result["phone_available"] = False
+
+    return result
+
+
 @router.post("/login", response_model=Token)
 async def login(user_in: UserLogin, db: AsyncSession = Depends(get_async_session)):
     identifier = user_in.identifier.strip()

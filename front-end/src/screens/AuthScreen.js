@@ -85,6 +85,19 @@ export default function AuthScreen() {
     resolveBackendHost();
   }, []);
 
+  const checkAvailability = async (emailToCheck, phoneToCheck) => {
+    try {
+      const params = new URLSearchParams();
+      if (emailToCheck) params.append('email', emailToCheck);
+      if (phoneToCheck) params.append('phone', phoneToCheck);
+      const resp = await axios.get(`${getApiUrl()}/check?${params.toString()}`);
+      return resp.data || {};
+    } catch (err) {
+      console.debug('Availability check failed', err?.response ?? err?.message ?? err);
+      return { email_available: true, phone_available: true };
+    }
+  };
+
   const handleRegister = async () => {
     if (!fullName.trim()) {
       return Alert.alert('Validation Error', 'Full Name is required.');
@@ -102,13 +115,26 @@ export default function AuthScreen() {
       return Alert.alert('Validation Error', 'Password must be at least 6 characters.');
     }
 
+    // Pre-check availability to provide immediate field-specific feedback
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = phone.replace(/[^0-9]/g, '');
+    const availability = await checkAvailability(normalizedEmail, normalizedPhone);
+    if (availability.email_available === false) {
+      setLoading(false);
+      return Alert.alert('Duplicate Account', 'Email is already registered. Please sign in.');
+    }
+    if (availability.phone_available === false) {
+      setLoading(false);
+      return Alert.alert('Duplicate Account', 'Phone number is already registered. Please sign in.');
+    }
+
     setLoading(true);
     try {
       const currentUrl = getApiUrl();
       const payload = {
         name: fullName.trim(),
-        email: email.trim().toLowerCase(),
-        phone: phone.replace(/[^0-9]/g, ''),
+        email: normalizedEmail,
+        phone: normalizedPhone,
         password,
       };
       console.debug('Register payload:', payload, 'URL:', `${currentUrl}/register`);
