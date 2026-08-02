@@ -71,25 +71,31 @@ export default function AuthScreen() {
     setPassword('');
   };
 
-  useEffect(() => {
-    const resolveBackendHost = async () => {
-      for (const host of BACKEND_CANDIDATES) {
-        const url = `http://${host}:${BACKEND_PORT}${HEALTH_PATH}`;
-        try {
-          const response = await axios.get(url, { timeout: 3000 });
-          if (response.status === 200) {
-            setApiBaseUrl(`http://${host}:${BACKEND_PORT}${API_PATH}`);
-            setBackendResolved(true);
-            break;
-          }
-        } catch (err) {
-          // ignore and try the next candidate
+  // Detect which backend host is reachable from this device/context.
+  const detectBackend = async () => {
+    setBackendDiscoveryLoading(true);
+    setBackendResolved(false);
+    for (const host of BACKEND_CANDIDATES) {
+      const url = `http://${host}:${BACKEND_PORT}${HEALTH_PATH}`;
+      try {
+        const response = await axios.get(url, { timeout: 3000 });
+        if (response.status === 200) {
+          setApiBaseUrl(`http://${host}:${BACKEND_PORT}${API_PATH}`);
+          setBackendResolved(true);
+          setBackendDiscoveryLoading(false);
+          return true;
         }
+      } catch (err) {
+        // ignore and try the next candidate
       }
-      setBackendDiscoveryLoading(false);
-    };
+    }
+    setBackendDiscoveryLoading(false);
+    setBackendResolved(false);
+    return false;
+  };
 
-    resolveBackendHost();
+  useEffect(() => {
+    detectBackend();
   }, []);
 
   useEffect(() => {
@@ -180,6 +186,18 @@ export default function AuthScreen() {
             String(message) || 'An account already exists with this Email or Phone Number. Please Sign In.',
           );
         } else if (!error.response) {
+          // Network error: try re-detecting backend once and retry
+          const reDetected = await detectBackend();
+          if (reDetected) {
+            try {
+              const retryResp = await axios.post(`${getApiUrl()}/register`, payload);
+              const session = retryResp.data;
+              await login(session);
+              return;
+            } catch (retryErr) {
+              console.debug('Retry after backend detect failed', retryErr);
+            }
+          }
           Alert.alert('Registration Failed', getNetworkErrorMessage(currentUrl));
         } else {
           Alert.alert('Registration Failed', String(message) || 'Unable to register. Please try again.');
@@ -225,7 +243,22 @@ export default function AuthScreen() {
       if (axios.isAxiosError(error)) {
         const backendMessage = error.response?.data?.message ?? error.response?.data?.detail;
         const message = backendMessage ?? error.message;
-            if (!error.response) {
+        if (!error.response) {
+          // network error: attempt to rediscover backend and retry once
+          const reDetected = await detectBackend();
+          if (reDetected) {
+            try {
+              const retryResp = await axios.post(`${getApiUrl()}/login`, {
+                identifier,
+                password,
+              });
+              const session = retryResp.data;
+              await login(session);
+              return;
+            } catch (retryErr) {
+              console.debug('Retry after backend detect failed', retryErr);
+            }
+          }
           Alert.alert('Sign In Failed', getNetworkErrorMessage(getApiUrl()));
         } else {
           Alert.alert('Sign In Failed', message || 'Unable to sign in. Please check your credentials.');
