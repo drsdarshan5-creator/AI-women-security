@@ -1,4 +1,4 @@
-﻿import React, { useContext, useEffect, useState } from 'react';
+﻿import React, { useContext, useEffect, useState, useRef } from 'react';
 import {
   Alert,
   ActivityIndicator,
@@ -54,6 +54,13 @@ export default function AuthScreen() {
   const [backendResolved, setBackendResolved] = useState(false);
   const [backendDiscoveryLoading, setBackendDiscoveryLoading] = useState(true);
 
+  // Availability / inline validation state for registration
+  const [emailAvailable, setEmailAvailable] = useState(null); // null = unknown, true/false = availability
+  const [phoneAvailable, setPhoneAvailable] = useState(null);
+  const [availabilityChecking, setAvailabilityChecking] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState(null);
+  const availabilityTimerRef = useRef(null);
+
   const getApiUrl = () => apiBaseUrl;
 
   const toggleMode = (nextMode) => {
@@ -62,6 +69,15 @@ export default function AuthScreen() {
     setEmail('');
     setPhone('');
     setPassword('');
+    // reset availability state when switching modes
+    setEmailAvailable(null);
+    setPhoneAvailable(null);
+    setAvailabilityError(null);
+    setAvailabilityChecking(false);
+    if (availabilityTimerRef.current) {
+      clearTimeout(availabilityTimerRef.current);
+      availabilityTimerRef.current = null;
+    }
   };
 
   useEffect(() => {
@@ -83,6 +99,14 @@ export default function AuthScreen() {
     };
 
     resolveBackendHost();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (availabilityTimerRef.current) {
+        clearTimeout(availabilityTimerRef.current);
+      }
+    };
   }, []);
 
   const checkAvailability = async (emailToCheck, phoneToCheck) => {
@@ -167,6 +191,28 @@ export default function AuthScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Debounced availability checker (schedules a check 500ms after last change)
+  const scheduleAvailabilityCheck = (emailVal, phoneVal) => {
+    if (availabilityTimerRef.current) {
+      clearTimeout(availabilityTimerRef.current);
+    }
+    availabilityTimerRef.current = setTimeout(async () => {
+      setAvailabilityChecking(true);
+      setAvailabilityError(null);
+      try {
+        const resp = await checkAvailability(emailVal || '', phoneVal || '');
+        setEmailAvailable(resp.email_available ?? null);
+        setPhoneAvailable(resp.phone_available ?? null);
+      } catch (e) {
+        setAvailabilityError('Unable to check availability');
+        setEmailAvailable(null);
+        setPhoneAvailable(null);
+      } finally {
+        setAvailabilityChecking(false);
+      }
+    }, 500);
   };
 
   const handleSignIn = async () => {
@@ -277,6 +323,8 @@ export default function AuthScreen() {
                 }
               } else {
                 setEmail(value);
+                // schedule availability check (debounced)
+                scheduleAvailabilityCheck(value.trim().toLowerCase(), phone.replace(/[^0-9]/g, ''));
               }
             }}
             placeholder={mode === 'register' ? 'jane.doe@example.com' : 'Email or Phone Number'}
@@ -284,6 +332,17 @@ export default function AuthScreen() {
             autoCapitalize="none"
             textContentType={mode === 'register' ? 'emailAddress' : 'username'}
           />
+          {mode === 'register' && (
+            availabilityChecking ? (
+              <Text style={styles.smallNote}>Checking availability...</Text>
+            ) : availabilityError ? (
+              <Text style={[styles.smallNote, { color: '#EF4444' }]}>{availabilityError}</Text>
+            ) : emailAvailable !== null ? (
+              <Text style={[styles.smallNote, { color: emailAvailable ? '#10B981' : '#EF4444' }]}>
+                {emailAvailable ? 'Email is available' : 'Email is already taken'}
+              </Text>
+            ) : null
+          )}
         </View>
 
         <Text style={[styles.noteText, styles.statusText]}>
@@ -302,11 +361,23 @@ export default function AuthScreen() {
             <TextInput
               style={styles.input}
               value={phone}
-              onChangeText={setPhone}
+              onChangeText={(value) => {
+                setPhone(value);
+                scheduleAvailabilityCheck(email.trim().toLowerCase(), value.replace(/[^0-9]/g, ''));
+              }}
               placeholder="1234567890"
               keyboardType="phone-pad"
               textContentType="telephoneNumber"
             />
+            {availabilityChecking ? (
+              <Text style={styles.smallNote}>Checking availability...</Text>
+            ) : availabilityError ? (
+              <Text style={[styles.smallNote, { color: '#EF4444' }]}>{availabilityError}</Text>
+            ) : phoneAvailable !== null ? (
+              <Text style={[styles.smallNote, { color: phoneAvailable ? '#10B981' : '#EF4444' }]}>
+                {phoneAvailable ? 'Phone number is available' : 'Phone number is already taken'}
+              </Text>
+            ) : null
           </View>
         )}
 
