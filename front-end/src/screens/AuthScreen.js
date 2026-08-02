@@ -1,4 +1,4 @@
-﻿import React, { useContext, useEffect, useState, useRef } from 'react';
+﻿﻿import React, { useContext, useEffect, useState, useRef } from 'react';
 import {
   Alert,
   ActivityIndicator,
@@ -54,7 +54,7 @@ export default function AuthScreen() {
   const [backendResolved, setBackendResolved] = useState(false);
   const [backendDiscoveryLoading, setBackendDiscoveryLoading] = useState(true);
 
-  // Availability / inline validation state for registration
+  // Inline availability state for registration fields
   const [emailAvailable, setEmailAvailable] = useState(null); // null = unknown, true/false = availability
   const [phoneAvailable, setPhoneAvailable] = useState(null);
   const [availabilityChecking, setAvailabilityChecking] = useState(false);
@@ -69,15 +69,6 @@ export default function AuthScreen() {
     setEmail('');
     setPhone('');
     setPassword('');
-    // reset availability state when switching modes
-    setEmailAvailable(null);
-    setPhoneAvailable(null);
-    setAvailabilityError(null);
-    setAvailabilityChecking(false);
-    if (availabilityTimerRef.current) {
-      clearTimeout(availabilityTimerRef.current);
-      availabilityTimerRef.current = null;
-    }
   };
 
   useEffect(() => {
@@ -118,8 +109,29 @@ export default function AuthScreen() {
       return resp.data || {};
     } catch (err) {
       console.debug('Availability check failed', err?.response ?? err?.message ?? err);
-      return { email_available: true, phone_available: true };
+      return { email_available: null, phone_available: null };
     }
+  };
+
+  const scheduleAvailabilityCheck = (emailVal, phoneVal) => {
+    if (availabilityTimerRef.current) {
+      clearTimeout(availabilityTimerRef.current);
+    }
+    availabilityTimerRef.current = setTimeout(async () => {
+      setAvailabilityChecking(true);
+      setAvailabilityError(null);
+      try {
+        const resp = await checkAvailability(emailVal || '', phoneVal || '');
+        setEmailAvailable(resp.email_available ?? null);
+        setPhoneAvailable(resp.phone_available ?? null);
+      } catch (e) {
+        setAvailabilityError('Unable to check availability');
+        setEmailAvailable(null);
+        setPhoneAvailable(null);
+      } finally {
+        setAvailabilityChecking(false);
+      }
+    }, 500);
   };
 
   const handleRegister = async () => {
@@ -139,26 +151,13 @@ export default function AuthScreen() {
       return Alert.alert('Validation Error', 'Password must be at least 6 characters.');
     }
 
-    // Pre-check availability to provide immediate field-specific feedback
-    const normalizedEmail = email.trim().toLowerCase();
-    const normalizedPhone = phone.replace(/[^0-9]/g, '');
-    const availability = await checkAvailability(normalizedEmail, normalizedPhone);
-    if (availability.email_available === false) {
-      setLoading(false);
-      return Alert.alert('Duplicate Account', 'Email is already registered. Please sign in.');
-    }
-    if (availability.phone_available === false) {
-      setLoading(false);
-      return Alert.alert('Duplicate Account', 'Phone number is already registered. Please sign in.');
-    }
-
     setLoading(true);
     try {
       const currentUrl = getApiUrl();
       const payload = {
         name: fullName.trim(),
-        email: normalizedEmail,
-        phone: normalizedPhone,
+        email: email.trim().toLowerCase(),
+        phone: phone.replace(/[^0-9]/g, ''),
         password,
       };
       console.debug('Register payload:', payload, 'URL:', `${currentUrl}/register`);
@@ -191,28 +190,6 @@ export default function AuthScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Debounced availability checker (schedules a check 500ms after last change)
-  const scheduleAvailabilityCheck = (emailVal, phoneVal) => {
-    if (availabilityTimerRef.current) {
-      clearTimeout(availabilityTimerRef.current);
-    }
-    availabilityTimerRef.current = setTimeout(async () => {
-      setAvailabilityChecking(true);
-      setAvailabilityError(null);
-      try {
-        const resp = await checkAvailability(emailVal || '', phoneVal || '');
-        setEmailAvailable(resp.email_available ?? null);
-        setPhoneAvailable(resp.phone_available ?? null);
-      } catch (e) {
-        setAvailabilityError('Unable to check availability');
-        setEmailAvailable(null);
-        setPhoneAvailable(null);
-      } finally {
-        setAvailabilityChecking(false);
-      }
-    }, 500);
   };
 
   const handleSignIn = async () => {
@@ -323,7 +300,7 @@ export default function AuthScreen() {
                 }
               } else {
                 setEmail(value);
-                // schedule availability check (debounced)
+                // schedule availability check when registering
                 scheduleAvailabilityCheck(value.trim().toLowerCase(), phone.replace(/[^0-9]/g, ''));
               }
             }}
@@ -377,7 +354,7 @@ export default function AuthScreen() {
               <Text style={[styles.smallNote, { color: phoneAvailable ? '#10B981' : '#EF4444' }]}>
                 {phoneAvailable ? 'Phone number is available' : 'Phone number is already taken'}
               </Text>
-            ) : null
+            ) : null}
           </View>
         )}
 
