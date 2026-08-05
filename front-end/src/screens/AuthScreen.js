@@ -12,50 +12,67 @@ import {
   View,
 } from 'react-native';
 import axios from 'axios';
+import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
 
-const BACKEND_CANDIDATES = Platform.OS === 'android'
-  ? ['10.0.2.2', '10.0.3.2', 'localhost', '10.245.81.156']
-  : ['127.0.0.1', 'localhost', '10.245.81.156'];
-const BACKEND_PORT = '8000';
+// Local Wi-Fi API Base Host
+const API_HOST = 'http://10.245.81.156:8000';
 const API_PATH = '/api/v1/auth';
-const HEALTH_PATH = '/api/v1/health';
 
-const getNetworkErrorMessage = (apiUrl = `http://${BACKEND_CANDIDATES[0]}:${BACKEND_PORT}${API_PATH}`) =>
-  `Could not reach the backend at ${apiUrl}. ` +
-  `Trying common host addresses: ${BACKEND_CANDIDATES.map((host) => `http://${host}:${BACKEND_PORT}`).join(', ')}. ` +
-  'If you are on a physical device, make sure your phone is on the same Wi-Fi network as your computer and the backend is running.';
+const DEFAULT_REQUEST_TIMEOUT = 10000;
+
+// Axios helper with custom timeout and request handling
+const axiosRequestWithTimeout = async (cfg, timeout = DEFAULT_REQUEST_TIMEOUT) => {
+  const controller = new AbortController();
+  const timerId = setTimeout(() => controller.abort(), timeout);
+  try {
+    const merged = {
+      ...cfg,
+      signal: controller.signal,
+      headers: {
+        ...(cfg.headers || {}),
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+    };
+    return await axios(merged);
+  } finally {
+    clearTimeout(timerId);
+  }
+};
 
 const validateEmail = (email) => {
-  if (!email) {
-    return false;
-  }
+  if (!email) return false;
   const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return regex.test(email.trim());
 };
 
 const validatePhone = (phone) => {
-  if (!phone) {
-    return false;
-  }
+  if (!phone) return false;
   const digits = phone.replace(/[^0-9]/g, '');
   return digits.length === 10;
 };
 
-export default function AuthScreen() {
+export default function AuthScreen({ navigation }) {
   const { login } = useContext(AuthContext);
   const [mode, setMode] = useState('signin');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Password visibility state
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [loading, setLoading] = useState(false);
-  const [apiBaseUrl, setApiBaseUrl] = useState(`http://${BACKEND_CANDIDATES[0]}:${BACKEND_PORT}${API_PATH}`);
+
+  const [apiBaseUrl, setApiBaseUrl] = useState(`${API_HOST}${API_PATH}`);
   const [backendResolved, setBackendResolved] = useState(false);
   const [backendDiscoveryLoading, setBackendDiscoveryLoading] = useState(true);
 
-  // Inline availability state for registration fields
-  const [emailAvailable, setEmailAvailable] = useState(null); // null = unknown, true/false = availability
+  // Inline availability state
+  const [emailAvailable, setEmailAvailable] = useState(null);
   const [phoneAvailable, setPhoneAvailable] = useState(null);
   const [availabilityChecking, setAvailabilityChecking] = useState(false);
   const [availabilityError, setAvailabilityError] = useState(null);
@@ -69,25 +86,26 @@ export default function AuthScreen() {
     setEmail('');
     setPhone('');
     setPassword('');
+    setConfirmPassword('');
+    setEmailAvailable(null);
+    setPhoneAvailable(null);
   };
 
-  // Detect which backend host is reachable from this device/context.
+  // Check connection against backend root endpoint '/'
   const detectBackend = async () => {
     setBackendDiscoveryLoading(true);
     setBackendResolved(false);
-    for (const host of BACKEND_CANDIDATES) {
-      const url = `http://${host}:${BACKEND_PORT}${HEALTH_PATH}`;
-      try {
-        const response = await axios.get(url, { timeout: 3000 });
-        if (response.status === 200) {
-          setApiBaseUrl(`http://${host}:${BACKEND_PORT}${API_PATH}`);
-          setBackendResolved(true);
-          setBackendDiscoveryLoading(false);
-          return true;
-        }
-      } catch (err) {
-        // ignore and try the next candidate
+    const healthUrl = `${API_HOST}/`;
+    try {
+      const response = await axiosRequestWithTimeout({ method: 'get', url: healthUrl });
+      if (response?.status === 200) {
+        setApiBaseUrl(`${API_HOST}${API_PATH}`);
+        setBackendResolved(true);
+        setBackendDiscoveryLoading(false);
+        return true;
       }
+    } catch (err) {
+      console.log('Backend health check failed:', err?.message);
     }
     setBackendDiscoveryLoading(false);
     setBackendResolved(false);
@@ -111,8 +129,9 @@ export default function AuthScreen() {
       const params = new URLSearchParams();
       if (emailToCheck) params.append('email', emailToCheck);
       if (phoneToCheck) params.append('phone', phoneToCheck);
-      const resp = await axios.get(`${getApiUrl()}/check?${params.toString()}`);
-      return resp.data || {};
+      const url = `${getApiUrl()}/check?${params.toString()}`;
+      const resp = await axiosRequestWithTimeout({ method: 'get', url });
+      return resp?.data || {};
     } catch (err) {
       console.debug('Availability check failed', err?.response ?? err?.message ?? err);
       return { email_available: null, phone_available: null };
@@ -141,21 +160,11 @@ export default function AuthScreen() {
   };
 
   const handleRegister = async () => {
-    if (!fullName.trim()) {
-      return Alert.alert('Validation Error', 'Full Name is required.');
-    }
-
-    if (!validateEmail(email)) {
-      return Alert.alert('Validation Error', 'Please enter a valid email address.');
-    }
-
-    if (!validatePhone(phone)) {
-      return Alert.alert('Validation Error', 'Please enter a valid 10-digit phone number.');
-    }
-
-    if (!password || password.length < 6) {
-      return Alert.alert('Validation Error', 'Password must be at least 6 characters.');
-    }
+    if (!fullName.trim()) return Alert.alert('Validation Error', 'Full Name is required.');
+    if (!validateEmail(email)) return Alert.alert('Validation Error', 'Please enter a valid email address.');
+    if (!validatePhone(phone)) return Alert.alert('Validation Error', 'Please enter a valid 10-digit phone number.');
+    if (!password || password.length < 6) return Alert.alert('Validation Error', 'Password must be at least 6 characters.');
+    if (password !== confirmPassword) return Alert.alert('Validation Error', 'Passwords do not match.');
 
     setLoading(true);
     try {
@@ -166,44 +175,21 @@ export default function AuthScreen() {
         phone: phone.replace(/[^0-9]/g, ''),
         password,
       };
-      console.debug('Register payload:', payload, 'URL:', `${currentUrl}/register`);
-      const response = await axios.post(`${currentUrl}/register`, payload);
+      const response = await axiosRequestWithTimeout({ method: 'post', url: `${currentUrl}/register`, data: payload });
 
       const session = response.data;
       await login(session);
+      Alert.alert('Success', 'Account created successfully!');
     } catch (error) {
-      const currentUrl = getApiUrl();
-      console.debug('Registration error:', error?.response ?? error?.message ?? error);
-      if (axios.isAxiosError(error)) {
-        const status = error.response?.status;
-        const backendMessage = error.response?.data?.message ?? error.response?.data?.detail ?? error.response?.data;
-        const message = backendMessage ?? error.message;
+      const backendMessage = error.response?.data?.message || error.response?.data?.detail;
+      const status = error.response?.status;
 
-        if (status === 409 || /duplicate|already exists/i.test(String(message))) {
-          // Show backend message when available to help identify whether email or phone is the conflict.
-          Alert.alert(
-            'Duplicate Account',
-            String(message) || 'An account already exists with this Email or Phone Number. Please Sign In.',
-          );
-        } else if (!error.response) {
-          // Network error: try re-detecting backend once and retry
-          const reDetected = await detectBackend();
-          if (reDetected) {
-            try {
-              const retryResp = await axios.post(`${getApiUrl()}/register`, payload);
-              const session = retryResp.data;
-              await login(session);
-              return;
-            } catch (retryErr) {
-              console.debug('Retry after backend detect failed', retryErr);
-            }
-          }
-          Alert.alert('Registration Failed', getNetworkErrorMessage(currentUrl));
-        } else {
-          Alert.alert('Registration Failed', String(message) || 'Unable to register. Please try again.');
-        }
+      if (status === 409 || /duplicate|already exists/i.test(String(backendMessage || ''))) {
+        Alert.alert('Duplicate Account', 'An account already exists with this Email or Mobile Number. Please Sign In.');
+      } else if (backendMessage) {
+        Alert.alert('Registration Failed', String(backendMessage));
       } else {
-        Alert.alert('Registration Failed', getNetworkErrorMessage(currentUrl));
+        Alert.alert('Registration Failed', 'Could not reach backend server. Make sure Uvicorn is running.');
       }
     } finally {
       setLoading(false);
@@ -211,60 +197,31 @@ export default function AuthScreen() {
   };
 
   const handleSignIn = async () => {
-    const identifier = email.trim() || phone.replace(/[^0-9]/g, '');
+    let identifier = (email || '').trim() || phone.replace(/[^0-9]/g, '');
 
-    if (!identifier) {
-      return Alert.alert('Validation Error', 'Email or Phone Number is required.');
-    }
-
-    if (email.trim() && !validateEmail(email)) {
-      return Alert.alert('Validation Error', 'Please enter a valid email address.');
-    }
-
-    if (!email.trim() && phone && !validatePhone(phone)) {
-      return Alert.alert('Validation Error', 'Please enter a valid 10-digit phone number.');
-    }
-
-    if (!password) {
-      return Alert.alert('Validation Error', 'Password is required.');
-    }
+    if (!identifier) return Alert.alert('Validation Error', 'Email or Phone Number is required.');
+    if (email.trim() && !validateEmail(email)) return Alert.alert('Validation Error', 'Please enter a valid email address.');
+    if (!email.trim() && phone && !validatePhone(phone)) return Alert.alert('Validation Error', 'Please enter a valid 10-digit phone number.');
+    if (!password) return Alert.alert('Validation Error', 'Password is required.');
 
     setLoading(true);
     try {
       const currentUrl = getApiUrl();
-      const response = await axios.post(`${currentUrl}/login`, {
-        identifier,
-        password,
+      const response = await axiosRequestWithTimeout({ 
+        method: 'post', 
+        url: `${currentUrl}/login`, 
+        data: { identifier, password } 
       });
 
       const session = response.data;
       await login(session);
+      Alert.alert('Login Successful', 'Welcome back!');
     } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const backendMessage = error.response?.data?.message ?? error.response?.data?.detail;
-        const message = backendMessage ?? error.message;
-        if (!error.response) {
-          // network error: attempt to rediscover backend and retry once
-          const reDetected = await detectBackend();
-          if (reDetected) {
-            try {
-              const retryResp = await axios.post(`${getApiUrl()}/login`, {
-                identifier,
-                password,
-              });
-              const session = retryResp.data;
-              await login(session);
-              return;
-            } catch (retryErr) {
-              console.debug('Retry after backend detect failed', retryErr);
-            }
-          }
-          Alert.alert('Sign In Failed', getNetworkErrorMessage(getApiUrl()));
-        } else {
-          Alert.alert('Sign In Failed', message || 'Unable to sign in. Please check your credentials.');
-        }
+      const backendMessage = error.response?.data?.message || error.response?.data?.detail;
+      if (backendMessage) {
+        Alert.alert('Sign In Failed', String(backendMessage));
       } else {
-        Alert.alert('Sign In Failed', getNetworkErrorMessage());
+        Alert.alert('Sign In Failed', 'Unable to reach backend server. Check your connection.');
       }
     } finally {
       setLoading(false);
@@ -285,136 +242,182 @@ export default function AuthScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <Text style={styles.heading}>AI Women's Security</Text>
+        <Text style={styles.brandTitle}>WOMEN'S SAFETY AI</Text>
 
-        <View style={styles.modeSwitchContainer}>
-          <TouchableOpacity
-            style={[styles.modeButton, mode === 'signin' && styles.modeButtonActive]}
-            onPress={() => toggleMode('signin')}
-          >
-            <Text style={[styles.modeButtonText, mode === 'signin' && styles.modeButtonTextActive]}>Sign In</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.modeButton, mode === 'register' && styles.modeButtonActive]}
-            onPress={() => toggleMode('register')}
-          >
-            <Text style={[styles.modeButtonText, mode === 'register' && styles.modeButtonTextActive]}>Register</Text>
-          </TouchableOpacity>
-        </View>
+        <View style={styles.card}>
+          {mode === 'signin' ? (
+            <>
+              <Text style={styles.cardHeaderSmall}>SECURE LOGIN</Text>
+              <Text style={styles.cardHeaderTitle}>Welcome back</Text>
+              <Text style={styles.cardSubtitle}>
+                Sign in to access your emergency dashboard and safety tools.
+              </Text>
+            </>
+          ) : (
+            <>
+              <View style={styles.iconCircle}>
+                <Ionicons name="shield-checkmark" size={26} color="#2563eb" />
+              </View>
+              <Text style={styles.cardHeaderTitle}>Create Your Account</Text>
+              <Text style={styles.cardSubtitle}>
+                Register to access the AI Women's Safety platform.
+              </Text>
+            </>
+          )}
 
-        {mode === 'register' && (
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Full Name</Text>
-            <TextInput
-              style={styles.input}
-              value={fullName}
-              onChangeText={setFullName}
-              placeholder="Jane Doe"
-              autoCapitalize="words"
-              textContentType="name"
-            />
-          </View>
-        )}
-
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>{mode === 'register' ? 'Email' : 'Email or Phone Number'}</Text>
-          <TextInput
-            style={styles.input}
-            value={mode === 'signin' ? email || phone : email}
-            onChangeText={(value) => {
-              if (mode === 'signin') {
-                const digitsOnly = value.replace(/[^0-9]/g, '');
-                if (digitsOnly === value) {
-                  setPhone(value);
-                  setEmail('');
-                } else {
-                  setEmail(value);
-                  setPhone('');
-                }
-              } else {
-                setEmail(value);
-                // schedule availability check when registering
-                scheduleAvailabilityCheck(value.trim().toLowerCase(), phone.replace(/[^0-9]/g, ''));
-              }
-            }}
-            placeholder={mode === 'register' ? 'jane.doe@example.com' : 'Email or Phone Number'}
-            keyboardType={mode === 'register' ? 'email-address' : 'default'}
-            autoCapitalize="none"
-            textContentType={mode === 'register' ? 'emailAddress' : 'username'}
-          />
           {mode === 'register' && (
-            availabilityChecking ? (
-              <Text style={styles.smallNote}>Checking availability...</Text>
-            ) : availabilityError ? (
-              <Text style={[styles.smallNote, { color: '#EF4444' }]}>{availabilityError}</Text>
-            ) : emailAvailable !== null ? (
-              <Text style={[styles.smallNote, { color: emailAvailable ? '#10B981' : '#EF4444' }]}>
-                {emailAvailable ? 'Email is available' : 'Email is already taken'}
-              </Text>
-            ) : null
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Full Name</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="person-outline" size={18} color="#6b7280" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={fullName}
+                  onChangeText={setFullName}
+                  placeholder="Enter your full name"
+                  autoCapitalize="words"
+                  textContentType="name"
+                />
+              </View>
+            </View>
           )}
-        </View>
 
-        <Text style={[styles.noteText, styles.statusText]}>
-          {backendDiscoveryLoading ? (
-            'Looking for backend...'
-          ) : backendResolved ? (
-            `Backend discovered at ${getApiUrl().replace(API_PATH, '')}`
-          ) : (
-            'Backend could not be auto-detected. Make sure the backend is running and your device is on the same network.'
-          )}
-        </Text>
-
-        {mode === 'register' && (
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Phone Number</Text>
-            <TextInput
-              style={styles.input}
-              value={phone}
-              onChangeText={(value) => {
-                setPhone(value);
-                scheduleAvailabilityCheck(email.trim().toLowerCase(), value.replace(/[^0-9]/g, ''));
-              }}
-              placeholder="1234567890"
-              keyboardType="phone-pad"
-              textContentType="telephoneNumber"
-            />
-            {availabilityChecking ? (
-              <Text style={styles.smallNote}>Checking availability...</Text>
-            ) : availabilityError ? (
-              <Text style={[styles.smallNote, { color: '#EF4444' }]}>{availabilityError}</Text>
-            ) : phoneAvailable !== null ? (
-              <Text style={[styles.smallNote, { color: phoneAvailable ? '#10B981' : '#EF4444' }]}>
-                {phoneAvailable ? 'Phone number is available' : 'Phone number is already taken'}
-              </Text>
-            ) : null}
+            <Text style={styles.label}>{mode === 'register' ? 'Email Address' : 'Email Address'}</Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="mail-outline" size={18} color="#6b7280" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                value={mode === 'signin' ? email || phone : email}
+                onChangeText={(value) => {
+                  if (mode === 'signin') {
+                    const digitsOnly = value.replace(/[^0-9]/g, '');
+                    if (digitsOnly === value) {
+                      setPhone(value);
+                      setEmail('');
+                    } else {
+                      setEmail(value);
+                      setPhone('');
+                    }
+                  } else {
+                    setEmail(value);
+                    scheduleAvailabilityCheck(value.trim().toLowerCase(), phone.replace(/[^0-9]/g, ''));
+                  }
+                }}
+                placeholder={mode === 'register' ? 'darshni@gmail.com' : 'Enter email address'}
+                keyboardType={mode === 'register' ? 'email-address' : 'default'}
+                autoCapitalize="none"
+                textContentType={mode === 'register' ? 'emailAddress' : 'username'}
+              />
+            </View>
+            {mode === 'register' && (
+              availabilityChecking ? (
+                <Text style={styles.smallNote}>Checking availability...</Text>
+              ) : availabilityError ? (
+                <Text style={[styles.smallNote, { color: '#ef4444' }]}>{availabilityError}</Text>
+              ) : emailAvailable !== null ? (
+                <Text style={[styles.smallNote, { color: emailAvailable ? '#10b981' : '#ef4444' }]}>
+                  {emailAvailable ? 'Email is available' : 'Email is already taken'}
+                </Text>
+              ) : null
+            )}
           </View>
-        )}
 
-        <View style={styles.fieldGroup}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Password"
-            secureTextEntry
-            textContentType="password"
-          />
+          {mode === 'register' && (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Mobile Number</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="call-outline" size={18} color="#6b7280" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={phone}
+                  onChangeText={(value) => {
+                    setPhone(value);
+                    scheduleAvailabilityCheck(email.trim().toLowerCase(), value.replace(/[^0-9]/g, ''));
+                  }}
+                  placeholder="Enter your number"
+                  keyboardType="phone-pad"
+                  textContentType="telephoneNumber"
+                />
+              </View>
+              {availabilityChecking ? (
+                <Text style={styles.smallNote}>Checking availability...</Text>
+              ) : availabilityError ? (
+                <Text style={[styles.smallNote, { color: '#ef4444' }]}>{availabilityError}</Text>
+              ) : phoneAvailable !== null ? (
+                <Text style={[styles.smallNote, { color: phoneAvailable ? '#10b981' : '#ef4444' }]}>
+                  {phoneAvailable ? 'Phone number is available' : 'Phone number is already taken'}
+                </Text>
+              ) : null}
+            </View>
+          )}
+
+          <View style={styles.fieldGroup}>
+            <Text style={styles.label}>Password</Text>
+            <View style={styles.inputContainer}>
+              <Ionicons name="lock-closed-outline" size={18} color="#6b7280" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="••••••••"
+                secureTextEntry={!showPassword}
+                textContentType="password"
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+                <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={18} color="#6b7280" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {mode === 'register' && (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={styles.inputContainer}>
+                <Ionicons name="lock-closed-outline" size={18} color="#6b7280" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Confirm your password"
+                  secureTextEntry={!showConfirmPassword}
+                  textContentType="password"
+                />
+                <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeIcon}>
+                  <Ionicons name={showConfirmPassword ? 'eye-outline' : 'eye-off-outline'} size={18} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          <TouchableOpacity style={styles.submitButton} onPress={submit} disabled={loading}>
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.submitButtonText}>{mode === 'register' ? 'Register' : 'Sign In'}</Text>
+            )}
+          </TouchableOpacity>
+
+          <View style={styles.footerRow}>
+            <Text style={styles.footerText}>
+              {mode === 'register' ? 'Already have an account? ' : "Don't have an account? "}
+            </Text>
+            <TouchableOpacity onPress={() => toggleMode(mode === 'register' ? 'signin' : 'register')}>
+              <Text style={styles.footerLink}>
+                {mode === 'register' ? 'Login' : 'Register now'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <TouchableOpacity style={styles.submitButton} onPress={submit} disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
+        <Text style={styles.statusText}>
+          {backendDiscoveryLoading ? (
+            'Connecting to backend...'
+          ) : backendResolved ? (
+            'Connected to backend server'
           ) : (
-            <Text style={styles.submitButtonText}>{mode === 'register' ? 'Create Account' : 'Sign In'}</Text>
+            'Backend could not be reached. Ensure Uvicorn is running.'
           )}
-        </TouchableOpacity>
-
-        <Text style={styles.noteText}>
-          {mode === 'register'
-            ? 'Use a valid email and 10-digit phone number to register.'
-            : 'Enter your email or phone number and password to sign in.'}
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -424,90 +427,125 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
+    backgroundColor: '#0f172a',
   },
   content: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 24,
+    padding: 20,
   },
-  heading: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1f2937',
-    textAlign: 'center',
-    marginBottom: 32,
-  },
-  modeSwitchContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginBottom: 24,
-    borderRadius: 12,
-    backgroundColor: '#e5e7eb',
-    overflow: 'hidden',
-  },
-  modeButton: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  modeButtonActive: {
-    backgroundColor: '#2563eb',
-  },
-  modeButtonText: {
-    color: '#374151',
+  brandTitle: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '800',
+    color: '#38bdf8',
+    textAlign: 'center',
+    letterSpacing: 1.5,
+    marginBottom: 20,
   },
-  modeButtonTextActive: {
-    color: '#fff',
+  card: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#dbeafe',
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  cardHeaderSmall: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#2563eb',
+    textAlign: 'center',
+    letterSpacing: 1,
+    marginBottom: 4,
+  },
+  cardHeaderTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1e293b',
+    textAlign: 'center',
+    marginBottom: 6,
+  },
+  cardSubtitle: {
+    fontSize: 13,
+    color: '#64748b',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 20,
   },
   fieldGroup: {
     marginBottom: 16,
   },
   label: {
-    marginBottom: 8,
-    color: '#4b5563',
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+    marginBottom: 6,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#cbd5e1',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+  },
+  inputIcon: {
+    marginRight: 8,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 10,
-    backgroundColor: '#fff',
-    color: '#111827',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 16,
+    flex: 1,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#0f172a',
+  },
+  eyeIcon: {
+    padding: 6,
   },
   submitButton: {
-    marginTop: 12,
-    paddingVertical: 16,
+    backgroundColor: '#0284c7',
     borderRadius: 12,
-    backgroundColor: '#2563eb',
+    paddingVertical: 14,
     alignItems: 'center',
+    marginTop: 10,
   },
   submitButtonText: {
-    color: '#fff',
+    color: '#ffffff',
     fontSize: 16,
     fontWeight: '700',
   },
-  noteText: {
-    marginTop: 20,
-    color: '#6b7280',
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 18,
+  },
+  footerText: {
     fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 20,
+    color: '#64748b',
+  },
+  footerLink: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0284c7',
   },
   smallNote: {
-    marginTop: 6,
-    color: '#9ca3af',
+    marginTop: 4,
     fontSize: 12,
-    lineHeight: 18,
   },
   statusText: {
-    marginBottom: 16,
-    color: '#374151',
+    marginTop: 16,
+    color: '#94a3b8',
+    fontSize: 12,
+    textAlign: 'center',
   },
 });
