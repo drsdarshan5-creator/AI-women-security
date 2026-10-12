@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
 
 // Local Wi-Fi API Base Host
-const API_HOST = 'http://10.245.81.156:8000';
+const API_HOST = 'http:// 10.254.61.187:8000';
 const API_PATH = '/api/v1/auth';
 
 const DEFAULT_REQUEST_TIMEOUT = 10000;

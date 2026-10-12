@@ -6,8 +6,6 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Linking,
-  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import AIPriorityEngine from '../services/AIPriorityEngine';
@@ -16,7 +14,6 @@ import AIPriorityEngine from '../services/AIPriorityEngine';
 const KIOSK_ID = 'kiosk-001-main-station';
 const KIOSK_NAME = 'Central Station - North Platform';
 const KIOSK_LOCATION = { latitude: 12.9715987, longitude: 77.594566 }; // example coords
-const ADMIN_NUMBER = '+15550001111'; // placeholder admin/police number
 
 export default function PublicKioskSOSScreen() {
   const [busy, setBusy] = useState(false);
@@ -78,20 +75,6 @@ export default function PublicKioskSOSScreen() {
       }
 
       setLastSession(session);
-
-      // Notify local admin via SMS composer (opens SMS app) with kiosk location
-      try {
-        const lat = session.coords.latitude;
-        const lon = session.coords.longitude;
-        const mapLink = `https://maps.google.com/?q=${lat},${lon}`;
-        const body = `PUBLIC KIOSK SOS at ${KIOSK_NAME} (${KIOSK_ID}). Location: ${mapLink}. Priority: ${session.priority.rank} (${session.priority.score}). Time: ${new Date(session.timestamp).toLocaleString()}`;
-        const separator = Platform.OS === 'ios' ? '&' : '?';
-        const url = `sms:${ADMIN_NUMBER}${separator}body=${encodeURIComponent(body)}`;
-        await Linking.openURL(url);
-      } catch (e) {
-        // If opening SMS fails, still proceed — the session is persisted and visible to responders in-app
-        console.warn('Failed to open SMS composer for kiosk alert', e?.message || e);
-      }
 
       Alert.alert('Kiosk SOS Sent', `Emergency broadcast sent for ${KIOSK_NAME}. Priority: ${session.priority.rank}`);
     } catch (err) {

@@ -7,24 +7,8 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
-  PermissionsAndroid,
-  Platform,
-  Linking,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import RNImmediatePhoneCall from 'react-native-immediate-phone-call';
-
-// Priority 1: Static Emergency Contact (Government / Rescue Team)
-export const ADMIN_CONTACT = {
-  id: 'admin_112',
-  name: 'Rescue Team / Emergency Services',
-  phone: '112',
-  relationship: 'Government Dispatch',
-  fixed: true,
-  priority: 1,
-};
-
-const STORAGE_KEY = 'userEmergencyContacts_v1';
+import client from '../api/client';
 
 const makeEmptyContact = () => ({
   id: `${Date.now()}-${Math.random()}`,
@@ -33,96 +17,95 @@ const makeEmptyContact = () => ({
   relationship: '',
 });
 
-// Helper: Fetch all contacts (1 Static + Up to 3 Personal) in Priority order
-export async function getFullCallSequence() {
-  try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
-    const userContacts = raw ? JSON.parse(raw) : [];
-    
-    // Attach priorities
-    const orderedUserContacts = userContacts.slice(0, 3).map((item, idx) => ({
-      ...item,
-      priority: idx + 2, // Priority 2, 3, or 4
-    }));
-
-    return [ADMIN_CONTACT, ...orderedUserContacts];
-  } catch (e) {
-    console.warn('Error fetching contacts sequence:', e);
-    return [ADMIN_CONTACT];
-  }
-}
-
-// Helper: Trigger SOS sequential auto-calling (Priority 1 -> 2 -> 3 -> 4)
-export async function triggerSequentialCalls(delayMs = 15000) {
-  const sequence = await getFullCallSequence();
-  console.log('Initiating Sequential SOS Call Sequence:', sequence);
-
-  sequence.forEach((contact, index) => {
-    if (contact.phone) {
-      setTimeout(() => {
-        console.log(`[SOS Priority ${contact.priority}] Dialing: ${contact.name} (${contact.phone})`);
-        
-        // Safe execution: Check if native module is linked (Dev Build), otherwise fallback to standard Linking (Expo Go)
-        if (RNImmediatePhoneCall && typeof RNImmediatePhoneCall.immediatePhoneCall === 'function') {
-          try {
-            RNImmediatePhoneCall.immediatePhoneCall(contact.phone);
-          } catch (e) {
-            console.warn('Native call failed, defaulting to Linking:', e);
-            Linking.openURL(`tel:${contact.phone}`);
-          }
-        } else {
-          // Fallback dialer open for Expo Go
-          Linking.openURL(`tel:${contact.phone}`);
-        }
-      }, index * delayMs); // 15s delay per step
-    }
-  });
-}
-
 export default function EmergencyContactsScreen() {
   const [userContacts, setUserContacts] = useState([]);
+  const [validationErrors, setValidationErrors] = useState({});
 
   useEffect(() => {
     loadUserContacts();
-    requestCallPermissionOnFirstLoad();
   }, []);
-
-  // Request Android Call Permission once upon registering/first-open
-  const requestCallPermissionOnFirstLoad = async () => {
-    if (Platform.OS === 'android') {
-      try {
-        await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.CALL_PHONE,
-          {
-            title: 'Emergency Call Access',
-            message: 'This app needs direct call permission to automatically contact emergency services and your trusted contacts sequentially during an SOS trigger.',
-            buttonPositive: 'Grant Permission',
-          }
-        );
-      } catch (err) {
-        console.warn('Call Permission Error:', err);
-      }
-    }
-  };
 
   const loadUserContacts = async () => {
     try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setUserContacts(Array.isArray(parsed) ? parsed.slice(0, 3) : []);
-      }
+      const response = await client.get('/emergency-contacts');
+      setUserContacts(Array.isArray(response.data) ? response.data : []);
     } catch (e) {
       console.warn('Failed to load emergency contacts:', e);
     }
   };
 
-  const persistUserContacts = async () => {
+  const handleSaveChanges = async () => {
+    const errors = {};
+
+    if (userContacts.length !== 3) {
+      Alert.alert('Validation Error', 'Exactly 3 priority contacts are required.');
+      return;
+    }
+
+    userContacts.forEach((contact, index) => {
+      const priority = index + 1;
+      if (!contact.name?.trim()) {
+        errors[`${index}.name`] = `Name for Priority ${priority} is required`;
+      }
+      if (!contact.phone?.trim()) {
+        errors[`${index}.phone`] = `Phone Number for Priority ${priority} is required`;
+      }
+      if (!contact.relationship?.trim()) {
+        errors[`${index}.relationship`] = `Relationship for Priority ${priority} is required`;
+      }
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      Alert.alert('Validation Error', Object.values(errors)[0]);
+      return;
+    }
+
+    const invalidPhoneIndex = userContacts.findIndex(
+      (contact) => !/^\d{10}$/.test(contact.phone.trim()),
+    );
+    if (invalidPhoneIndex !== -1) {
+      const fieldKey = `${invalidPhoneIndex}.phone`;
+      const message = `Phone Number for Priority ${invalidPhoneIndex + 1} must be exactly 10 digits.`;
+      setValidationErrors({ [fieldKey]: message });
+      Alert.alert('Validation Error', message);
+      return;
+    }
+
+    const phoneNumbers = userContacts.map((contact) => contact.phone.trim());
+    if (new Set(phoneNumbers).size !== phoneNumbers.length) {
+      const duplicateErrors = {};
+      phoneNumbers.forEach((phoneNumber, index) => {
+        if (phoneNumbers.filter((candidate) => candidate === phoneNumber).length > 1) {
+          duplicateErrors[`${index}.phone`] = 'Each priority number must be unique.';
+        }
+      });
+      setValidationErrors(duplicateErrors);
+      Alert.alert('Validation Error', 'Each priority number must be unique.');
+      return;
+    }
+
+    setValidationErrors({});
     try {
-      await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(userContacts));
+      await client.put('/contacts', {
+        contacts: userContacts.map(({ name, phone, relationship }) => ({
+          name: name.trim(),
+          phone_number: phone.trim(),
+          relationship: relationship.trim(),
+        })),
+      });
       Alert.alert('Saved', 'Emergency contacts successfully updated.');
-    } catch (e) {
-      Alert.alert('Save Failed', 'Unable to save contacts. Please try again.');
+    } catch (error) {
+      const detail = error?.response?.data?.detail;
+      const backendMessage = Array.isArray(detail)
+        ? detail.map((item) => item.msg || item.message).filter(Boolean).join('\n')
+        : typeof detail === 'string'
+          ? detail
+          : error?.response?.data?.message;
+      Alert.alert(
+        'Save Failed',
+        backendMessage || 'Unable to save contacts. Please try again.',
+      );
     }
   };
 
@@ -135,6 +118,11 @@ export default function EmergencyContactsScreen() {
   };
 
   const updateContactField = (index, field, value) => {
+    setValidationErrors((prev) => {
+      const next = { ...prev };
+      delete next[`${index}.${field}`];
+      return next;
+    });
     setUserContacts((prev) =>
       prev.map((c, i) => (i === index ? { ...c, [field]: value } : c))
     );
@@ -154,32 +142,17 @@ export default function EmergencyContactsScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.contentContainer}>
       <View style={styles.header}>
-        <Text style={styles.title}>Emergency Priority Contacts ({userContacts.length + 1}/4)</Text>
+        <Text style={styles.title}>Emergency Contacts ({userContacts.length})</Text>
         <Text style={styles.subtitle}>
-          1st priority is pinned. You can configure Priorities 2, 3, and 4 below.
+          Contacts are stored securely on the backend and notified through configured emergency channels.
         </Text>
       </View>
 
-      {/* Static Admin/Rescue Contact (Priority 1) */}
-      <View style={[styles.card, styles.adminCard]}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.cardTitle}>Priority 1: {ADMIN_CONTACT.name}</Text>
-          <Text style={styles.adminBadge}>Locked</Text>
-        </View>
-        <View style={styles.fieldRow}>
-          <Text style={styles.fieldLabel}>Emergency Hotline</Text>
-          <Text style={styles.adminPhone}>{ADMIN_CONTACT.phone}</Text>
-        </View>
-        <Text style={styles.helpText}>
-          System default contact. Cannot be removed or edited.
-        </Text>
-      </View>
-
-      {/* Customizable Personal Contacts (Priorities 2, 3, 4) */}
+      {/* Customizable contacts */}
       {userContacts.map((contact, idx) => (
         <View key={contact.id} style={styles.card}>
           <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Priority {idx + 2} Contact</Text>
+            <Text style={styles.cardTitle}>Priority {idx + 1} Contact</Text>
             <TouchableOpacity onPress={() => deleteContact(idx)} style={styles.deleteButton}>
               <Text style={styles.deleteButtonText}>Delete</Text>
             </TouchableOpacity>
@@ -188,7 +161,7 @@ export default function EmergencyContactsScreen() {
           <View style={styles.fieldRow}>
             <Text style={styles.fieldLabel}>Contact Name</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, validationErrors[`${idx}.name`] && styles.inputError]}
               placeholder="e.g. John Doe"
               value={contact.name}
               onChangeText={(v) => updateContactField(idx, 'name', v)}
@@ -198,7 +171,7 @@ export default function EmergencyContactsScreen() {
           <View style={styles.fieldRow}>
             <Text style={styles.fieldLabel}>Phone Number</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, validationErrors[`${idx}.phone`] && styles.inputError]}
               placeholder="e.g. +1234567890"
               keyboardType="phone-pad"
               value={contact.phone}
@@ -209,7 +182,7 @@ export default function EmergencyContactsScreen() {
           <View style={styles.fieldRow}>
             <Text style={styles.fieldLabel}>Relationship</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, validationErrors[`${idx}.relationship`] && styles.inputError]}
               placeholder="e.g. Parent, Friend, Spouse"
               value={contact.relationship}
               onChangeText={(v) => updateContactField(idx, 'relationship', v)}
@@ -226,7 +199,7 @@ export default function EmergencyContactsScreen() {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity style={styles.primaryButton} onPress={persistUserContacts}>
+        <TouchableOpacity style={styles.primaryButton} onPress={handleSaveChanges}>
           <Text style={styles.primaryButtonText}>Save Changes</Text>
         </TouchableOpacity>
       </View>
@@ -262,6 +235,7 @@ const styles = StyleSheet.create({
   fieldRow: { marginBottom: 8 },
   fieldLabel: { fontSize: 12, color: '#555', marginBottom: 4, fontWeight: '600' },
   input: { backgroundColor: '#f8f8f8', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, fontSize: 14, borderWidth: 1, borderColor: '#ddd' },
+  inputError: { borderColor: '#ff4d4d' },
   actionsRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginTop: 10 },
   addButton: { flex: 1, backgroundColor: '#4caf50', paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
   addButtonText: { color: '#fff', fontWeight: '700' },

@@ -3,6 +3,7 @@ import re
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
 from jose import jwt
 from passlib.hash import pbkdf2_sha256
 from sqlalchemy import select
@@ -14,6 +15,7 @@ from app.models.user import User
 from app.schemas.user import Token, UserCreate, UserLogin
 
 router = APIRouter()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -31,6 +33,22 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     )
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_async_session)) -> User:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id = payload.get("user_id")
+        if not user_id:
+            raise ValueError("missing user id")
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication credentials") from exc
+
+    result = await db.execute(select(User).where(User.id == int(user_id), User.is_active.is_(True)))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
 
 
 def normalize_phone(phone: str | None) -> str | None:

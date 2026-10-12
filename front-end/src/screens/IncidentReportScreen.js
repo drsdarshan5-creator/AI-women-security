@@ -165,13 +165,16 @@ export default function IncidentReportScreen({ route, navigation }) {
   const finalizeSubmit = async () => {
     // Build the submission payload. If anonymous, exclude personal identifiers.
     const payload = {
+      id: `manual-public-${Date.now()}`,
+      report_type: 'manual_public',
       title: title.trim(),
       location: location.trim(),
       description: description.trim(),
       severity,
       attachments,
       anonymous: !!anonymous,
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
+      category: severity === 'high' ? 'Harassment' : severity === 'medium' ? 'Theft' : 'Safety Concern',
     };
 
     if (!anonymous) {
@@ -179,11 +182,9 @@ export default function IncidentReportScreen({ route, navigation }) {
         name: reporterName.trim() || null,
         phone: reporterPhone.trim() || null,
       };
+      payload.reporter_name = reporterName.trim() || null;
+      payload.reporter_phone = reporterPhone.trim() || null;
     }
-
-    // Simulate secure submission: in a real app this would POST to a secure endpoint with transport encryption
-    // and possibly client-side encryption of personally identifying information. Here we only simulate by
-    // not including reporter fields when anonymous === true.
 
     const alertMessage = anonymous
       ? `Your anonymous report "${title}" has been securely submitted.`
@@ -201,20 +202,28 @@ export default function IncidentReportScreen({ route, navigation }) {
           setPhotoAttached(false);
           setVideoAttached(false);
           setAttachments([]);
-          // Optionally keep reporter info for convenience if not anonymous
           if (anonymous) {
             setReporterName('');
             setReporterPhone('');
           }
 
-          // persist fingerprint in local history for duplicate detection
+          try {
+            const PUBLIC_REPORTS_KEY = 'PUBLIC_INCIDENT_REPORTS';
+            const raw = await AsyncStorage.getItem(PUBLIC_REPORTS_KEY);
+            const list = raw ? JSON.parse(raw) : [];
+            const safeList = Array.isArray(list) ? list : [];
+            safeList.unshift(payload);
+            await AsyncStorage.setItem(PUBLIC_REPORTS_KEY, JSON.stringify(safeList.slice(0, 200)));
+          } catch (e) {
+            console.warn('Failed to persist public incident report', e?.message || e);
+          }
+
           try {
             const KEY = INCIDENT_HISTORY_KEY;
             const raw = await AsyncStorage.getItem(KEY);
             const list = raw ? JSON.parse(raw) : [];
             const fingerprint = (payload.title + '|' + payload.description).toLowerCase().replace(/\s+/g, ' ').trim();
             list.unshift({ fingerprint, ts: Date.now() });
-            // prune older than 7 days and keep last 50
             const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
             const pruned = list.filter((r) => r.ts >= cutoff).slice(0, 50);
             await AsyncStorage.setItem(KEY, JSON.stringify(pruned));
@@ -224,9 +233,6 @@ export default function IncidentReportScreen({ route, navigation }) {
         },
       },
     ]);
-
-    // For debugging / developer visibility only (do not log PII in production)
-    // console.log('Submitting report payload:', payload);
   };
 
   const getSeverityColor = (level) => {

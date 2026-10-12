@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
     SECRET_KEY: str = "change-this-secret-key"
     ALGORITHM: str = "HS256"
+    SMS_PROVIDER: str = ""
+    SMS_FROM_NUMBER: str = ""
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    FCM_SERVER_KEY: str = ""
+    WHATSAPP_ENABLED: bool = False
+    WHATSAPP_ACCESS_TOKEN: str = ""
+    WHATSAPP_PHONE_NUMBER_ID: str = ""
 
     @validator("BACKEND_CORS_ORIGINS", pre=True)
     def assemble_cors_origins(cls, value):

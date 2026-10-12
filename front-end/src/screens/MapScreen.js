@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { updateEmergencyLocation } from '../services/emergencyService';
 
 const { width } = Dimensions.get('window');
 
@@ -167,7 +168,13 @@ export default function MapScreen() {
   };
 
   const sendLocationBroadcast = async (coords, session) => {
-    if (LOCATION_BROADCAST_ENDPOINT) {
+    if (session?.id) {
+      try {
+        await updateEmergencyLocation(session.id, coords);
+      } catch (e) {
+        console.warn('Backend live-location update failed', e?.message || e);
+      }
+    } else if (LOCATION_BROADCAST_ENDPOINT) {
       try {
         await fetch(LOCATION_BROADCAST_ENDPOINT, {
           method: 'POST',

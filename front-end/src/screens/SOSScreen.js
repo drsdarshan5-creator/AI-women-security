@@ -6,23 +6,15 @@ import {
   ScrollView,
   StyleSheet,
   Alert,
-  Linking,
-  Platform,
+  AppState,
 } from 'react-native';
-let NetInfo;
-try {
-  // use require so the app won't crash if the optional package isn't installed
-  NetInfo = require('@react-native-community/netinfo');
-} catch (e) {
-  NetInfo = null;
-}
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Accelerometer } from 'expo-sensors';
 import { Camera, CameraView } from 'expo-camera';
 import { Audio } from 'expo-av';
 import { getCurrentLocation } from '../services/locationService';
-import { triggerSequentialCalls } from './EmergencyContactsScreen';
 import { captureEmergencyMedia } from '../utils/mediaCaptures';
+import { createEmergency } from '../services/emergencyService';
 
 const SHAKE_THRESHOLD = 2.5;
 const SHAKE_COOLDOWN_MS = 1500;
@@ -56,9 +48,8 @@ const SOSScreen = ({ navigation }) => {
   const [microphonePermission, setMicrophonePermission] = useState(false);
   const cameraRef = useRef(null);
 
-  // Response/acknowledgement state for call loop
+  // Response/acknowledgement state
   const [responseAcknowledged, setResponseAcknowledged] = useState(false);
-  const callTimerRef = useRef(null);
 
   useEffect(() => {
     alertActiveRef.current = alertActive;
@@ -75,7 +66,6 @@ const SOSScreen = ({ navigation }) => {
         clearTimeout(sidePressTimeoutRef.current);
         sidePressTimeoutRef.current = null;
       }
-      stopCallSequence();
     };
   }, []);
 
@@ -106,116 +96,70 @@ const SOSScreen = ({ navigation }) => {
   }, [shakeSensitivityEnabled]);
 
   useEffect(() => {
+    let isMounted = true;
+
     async function requestCapturePermissions() {
       try {
-        const cameraResult = await Camera.requestCameraPermissionsAsync();
-        const audioResult = await Audio.requestMicrophonePermissionsAsync();
-        setCameraPermission(cameraResult.status === 'granted');
-        setMicrophonePermission(audioResult.status === 'granted');
+        let cameraResult = await Camera.getCameraPermissionsAsync();
+        let audioResult = await Audio.getPermissionsAsync();
+
+        if (cameraResult.status !== 'granted') {
+          cameraResult = await Camera.requestCameraPermissionsAsync();
+        }
+
+        if (audioResult.status !== 'granted') {
+          audioResult = await Audio.requestPermissionsAsync();
+        }
+
+        const cameraGranted = cameraResult.status === 'granted';
+        const microphoneGranted = audioResult.status === 'granted';
+
+        if (isMounted) {
+          setCameraPermission(cameraGranted);
+          setMicrophonePermission(microphoneGranted);
+        }
+
+        if (!cameraGranted || !microphoneGranted) {
+          Alert.alert(
+            'Missing Permissions',
+            'Camera and microphone access are required to capture SOS evidence. Please grant them in Settings.'
+          );
+        }
       } catch (e) {
         console.warn('Permission request failed', e?.message || e);
+        if (isMounted) {
+          setCameraPermission(false);
+          setMicrophonePermission(false);
+        }
       }
     }
 
     requestCapturePermissions();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const ADMIN_NUMBER = '112';
-  const CONTACTS_STORAGE_KEY = 'userEmergencyContacts_v1';
+  useEffect(() => {
+    if (!alertActive) {
+      return undefined;
+    }
 
-  // Connectivity check helper
-  const isOnline = async () => {
-    try {
-      if (NetInfo && NetInfo.fetch) {
-        const state = await NetInfo.fetch();
-        if (typeof state.isConnected !== 'undefined') {
-          return state.isConnected && (typeof state.isInternetReachable === 'undefined' ? true : state.isInternetReachable);
-        }
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        console.log('[SOS Screen] Emergency session remains active while app loses foreground focus.');
       }
-    } catch (e) {
-      // ignore, fallback
-    }
+    });
 
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      const res = await fetch('https://clients3.google.com/generate_204', { method: 'GET', signal: controller.signal });
-      clearTimeout(timeout);
-      return res && (res.status === 204 || res.status === 200);
-    } catch (e) {
-      return false;
-    }
-  };
-
-  // Helper: load saved priority contacts
-  const loadSavedPriorityContacts = async () => {
-    try {
-      const raw = await AsyncStorage.getItem(CONTACTS_STORAGE_KEY);
-      if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return [];
-      return parsed.slice(0, 3).map((c, i) => ({ ...c, id: c.id ?? `user-${i}` }));
-    } catch (e) {
-      console.warn('Failed to load saved priority contacts:', e?.message || e);
-      return [];
-    }
-  };
-
-  // Send SMS via standard device composer fallback
-  const sendEmergencySMS = async (coords, recipientsOverride) => {
-    try {
-      let phones = [];
-      if (Array.isArray(recipientsOverride) && recipientsOverride.length > 0) {
-        phones = recipientsOverride;
-      } else {
-        const savedContacts = await loadSavedPriorityContacts();
-        phones = savedContacts.map((c) => c.phone).filter(Boolean);
-      }
-
-      const unique = Array.from(new Set([...phones.slice(0, 3), ADMIN_NUMBER])).filter(Boolean).slice(0, 4);
-
-      const lat = coords?.latitude ?? lastKnownLocation?.latitude ?? 'unknown';
-      const lon = coords?.longitude ?? lastKnownLocation?.longitude ?? 'unknown';
-      const mapLink = lat !== 'unknown' && lon !== 'unknown' ? `https://maps.google.com/?q=${lat},${lon}` : 'Location unavailable';
-      const body = `EMERGENCY SOS: I need immediate help. Location: ${mapLink} (lat:${lat}, lon:${lon}). Time: ${new Date().toLocaleString()}`;
-
-      const separator = Platform.OS === 'ios' ? '&' : '?';
-      const url = `sms:${unique.join(',')}${separator}body=${encodeURIComponent(body)}`;
-
-      await Linking.openURL(url);
-    } catch (err) {
-      console.warn('Failed to open SMS composer:', err?.message || err);
-    }
-  };
-
-  // Live automated response sequence (SMS fallback + native immediate dialer trigger)
-  const startEmergencyResponse = async (coords) => {
-    setResponseAcknowledged(false);
-
-    const saved = await loadSavedPriorityContacts();
-    const recipientPhones = saved.map((c) => c.phone).filter(Boolean);
-    const targets = [...recipientPhones.slice(0, 3), ADMIN_NUMBER].filter(Boolean);
-
-    // Open SMS composer with prefilled message & contacts
-    await sendEmergencySMS(coords, targets);
-
-    // Trigger immediate, direct native phone calls sequentially (Rescue 112 -> Priority 2 -> 3 -> 4)
-    await triggerSequentialCalls(15000);
-  };
-
-  const stopCallSequence = () => {
-    if (callTimerRef.current) {
-      clearTimeout(callTimerRef.current);
-      callTimerRef.current = null;
-    }
-  };
+    return () => subscription?.remove?.();
+  }, [alertActive]);
 
   const acknowledgeResponse = () => {
     setResponseAcknowledged(true);
     setAlertActive(false);
     setEmergencyState('IDLE');
     setSirenActive(false);
-    stopCallSequence();
     Alert.alert('SOS Deactivated', 'Emergency response has been safely acknowledged and deactivated.');
   };
 
@@ -311,18 +255,38 @@ const SOSScreen = ({ navigation }) => {
 
       persistSosActivation({ trigger, coords });
 
-      // Evidence Collection (6 Photos + 10s Video + Audio)
+      try {
+        const emergency = await createEmergency({ trigger, coords });
+        await AsyncStorage.setItem('currentSOSSession', JSON.stringify({
+          id: emergency.emergency_id,
+          active: true,
+          timestamp: Date.now(),
+          coords: coords || null,
+        }));
+        setNotificationMessage(`SOS ${emergency.emergency_id} received. Notifications are being dispatched.`);
+      } catch (e) {
+        console.warn('Backend SOS submission failed:', e?.message || e);
+        setEmergencyState('OFFLINE_SOS_MODE');
+        setNotificationMessage('SOS is active locally. Backend notification could not be reached.');
+      }
+
+      // Evidence Collection (photo/video/audio) must never block SOS workflow.
       try {
         setNotificationMessage('Capturing emergency multi-media evidence...');
         const capturedMedia = await captureEmergencyMedia(cameraRef, 6);
 
         const evidenceRecord = {
           id: `evidence-${Date.now()}`,
+          report_type: 'sos_hardware',
+          hardware_id: `sos-${Date.now()}`,
           timestamp: Date.now(),
           location: coords || null,
-          photos: capturedMedia.photos,
-          videoUri: capturedMedia.videoUri,
-          audioUri: capturedMedia.audioUri,
+          latitude: coords?.latitude ?? null,
+          longitude: coords?.longitude ?? null,
+          photos: capturedMedia.photos || [],
+          photoUri: capturedMedia.photos?.[0] || null,
+          videoUri: capturedMedia.videoUri || null,
+          audioUri: capturedMedia.audioUri || null,
         };
 
         const rawLogs = await AsyncStorage.getItem('EMERGENCY_EVIDENCE_LOGS');
@@ -330,21 +294,20 @@ const SOSScreen = ({ navigation }) => {
         const normalizedLogs = Array.isArray(logs) ? logs : [];
         normalizedLogs.unshift(evidenceRecord);
         await AsyncStorage.setItem('EMERGENCY_EVIDENCE_LOGS', JSON.stringify(normalizedLogs));
-        
-        setNotificationMessage(`SOS evidence saved: ${capturedMedia.photos.length} Photos, Video & Audio.`);
+
+        const evidenceSummary = [
+          `${capturedMedia.photos?.length || 0} photos`,
+          capturedMedia.videoUri ? 'video' : 'no video',
+          capturedMedia.audioUri ? 'audio' : 'no audio',
+        ].join(', ');
+
+        setNotificationMessage(`SOS evidence saved: ${evidenceSummary}.`);
       } catch (e) {
         console.warn('Evidence collection failed', e?.message || e);
+        setNotificationMessage('SOS is active. Location and fallback notifications were recorded even though evidence capture failed.');
       }
 
-      const online = await isOnline();
-      if (!online) {
-        setEmergencyState('OFFLINE_SOS_MODE');
-        Alert.alert('Offline SOS', 'No internet connection detected. Switching to Offline SOS Mode.');
-      } else {
-        Alert.alert('SOS Alert Activated', `Triggered by ${trigger}. Contacts and emergency services are being called sequentially.`);
-      }
-
-      startEmergencyResponse(coords);
+      Alert.alert('SOS Alert Activated', `Triggered by ${trigger}. Emergency contacts and the rescue dashboard are being notified.`);
     }
   };
 
@@ -427,7 +390,7 @@ const SOSScreen = ({ navigation }) => {
         </Text>
         <Text style={styles.statusSubtitle}>
           {alertActive
-            ? `State: ${emergencyState} | Sequentially calling emergency contacts...`
+            ? `State: ${emergencyState} | Backend notifications are processing...`
             : 'Hold the button for 3 seconds or trigger shake/side-button to send SOS.'}
         </Text>
       </View>

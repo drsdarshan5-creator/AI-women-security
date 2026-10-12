@@ -10,10 +10,9 @@ import HomeScreen from './src/screens/HomeScreen';
 import SOSScreen from './src/screens/SOSScreen';
 import MapScreen from './src/screens/MapScreen';
 import IncidentReportScreen from './src/screens/IncidentReportScreen';
-import FakeCallScreen from './src/screens/FakeCallScreen';
 import EmergencyContactsScreen from './src/screens/EmergencyContactsScreen';
-import PublicKioskSOSScreen from './src/screens/PublicKioskSOSScreen';
 import OfficerEvidenceViewScreen from './src/screens/OfficerEvidenceViewScreen';
+import ChatScreen from './src/screens/ChatScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -85,19 +84,14 @@ function Navigation() {
               options={{ title: 'Emergency Contacts' }} 
             />
             <Stack.Screen 
-              name="PublicKioskSOS" 
-              component={PublicKioskSOSScreen} 
-              options={{ title: 'Public Kiosk SOS' }} 
-            />
-            <Stack.Screen 
               name="OfficerEvidence" 
               component={OfficerEvidenceViewScreen} 
               options={{ title: 'Officer Evidence' }} 
             />
             <Stack.Screen 
-              name="FakeCall" 
-              component={FakeCallScreen} 
-              options={{ headerShown: false }} 
+              name="Chat" 
+              component={ChatScreen} 
+              options={{ title: 'AI Safety Chatbot' }} 
             />
           </>
         )}

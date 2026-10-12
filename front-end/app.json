@@ -5,12 +5,39 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "icon": "./assets/portrait-bg.png",
+    "splash": {
+      "image": "./assets/portrait-bg.png",
+      "resizeMode": "cover",
+      "backgroundColor": "#000000"
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#000000",
+          "image": "./assets/portrait-bg.png",
+          "resizeMode": "cover"
+        }
+      ]
+    ],
     "android": {
       "package": "com.anonymous.aiwomensecurityapp",
+      "usesCleartextTraffic": true,
+      "splash": {
+        "image": "./assets/portrait-bg.png",
+        "resizeMode": "cover",
+        "backgroundColor": "#000000"
+      },
       "config": {
         "googleMaps": {
           "apiKey": "YOUR_GOOGLE_MAPS_API_KEY_HERE"
         }
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d12e3ed9-4640-4b16-8fbd-20ff602a9878"
       }
     }
   }

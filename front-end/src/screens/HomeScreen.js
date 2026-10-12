@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-nati
 import { AuthContext } from '../context/AuthContext';
 
 export default function HomeScreen({ navigation }) {
-  const { user, logout } = useContext(AuthContext);
+  const { user } = useContext(AuthContext);
   const greetingText = user?.name ? `Welcome back, ${user.name}` : 'Welcome Back';
 
   return (
@@ -15,9 +15,6 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.greeting}>{greetingText}</Text>
             <Text style={styles.title}>AI Women's Security</Text>
           </View>
-          <TouchableOpacity style={styles.logoutButton} onPress={logout}>
-            <Text style={styles.logoutText}>Logout</Text>
-          </TouchableOpacity>
         </View>
         <Text style={styles.subtitle}>Stay safe, stay empowered</Text>
       </View>
@@ -66,19 +63,6 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.cardDescription}>Document an incident</Text>
         </TouchableOpacity>
 
-        {/* Fake Call Card */}
-        <TouchableOpacity
-          style={[styles.card, styles.callCard]}
-          onPress={() => navigation.navigate('FakeCall')}
-          activeOpacity={0.8}
-        >
-          <View style={styles.cardIconContainer}>
-            <Text style={styles.cardIcon}>☎️</Text>
-          </View>
-          <Text style={styles.cardTitle}>Fake Call</Text>
-          <Text style={styles.cardDescription}>Trigger fake incoming call</Text>
-        </TouchableOpacity>
-
         {/* Emergency Contacts Management */}
         <TouchableOpacity
           style={[styles.card, styles.contactsCard]}
@@ -90,19 +74,6 @@ export default function HomeScreen({ navigation }) {
           </View>
           <Text style={styles.cardTitle}>Emergency Contacts</Text>
           <Text style={styles.cardDescription}>Manage your 3 priority contacts</Text>
-        </TouchableOpacity>
-
-        {/* Public Kiosk Mode */}
-        <TouchableOpacity
-          style={[styles.card, styles.kioskCard]}
-          onPress={() => navigation.navigate('PublicKioskSOS')}
-          activeOpacity={0.8}
-        >
-          <View style={styles.cardIconContainer}>
-            <Text style={styles.cardIcon}>🏧</Text>
-          </View>
-          <Text style={styles.cardTitle}>Public Kiosk Mode</Text>
-          <Text style={styles.cardDescription}>Simulated public SOS kiosk</Text>
         </TouchableOpacity>
 
         {/* Officer Evidence Portal */}
@@ -117,37 +88,19 @@ export default function HomeScreen({ navigation }) {
           <Text style={styles.cardTitle}>Officer Evidence Portal</Text>
           <Text style={styles.cardDescription}>Authorized access for rescue officers</Text>
         </TouchableOpacity>
-      </View>
 
-      {/* Features Section */}
-      <View style={styles.featuresSection}>
-        <Text style={styles.sectionTitle}>Features</Text>
-        <View style={styles.featuresList}>
-          <View style={styles.featureItem}>
-            <Text style={styles.featureBullet}>✓</Text>
-            <Text style={styles.featureText}>Real-time location sharing</Text>
+        {/* AI Safety Chatbot */}
+        <TouchableOpacity
+          style={[styles.card, styles.chatCard]}
+          onPress={() => navigation.navigate('Chat')}
+          activeOpacity={0.8}
+        >
+          <View style={styles.cardIconContainer}>
+            <Text style={styles.cardIcon}>🤖</Text>
           </View>
-          <View style={styles.featureItem}>
-            <Text style={styles.featureBullet}>✓</Text>
-            <Text style={styles.featureText}>Emergency contact notifications</Text>
-          </View>
-          <View style={styles.featureItem}>
-            <Text style={styles.featureBullet}>✓</Text>
-            <Text style={styles.featureText}>Safe route recommendations</Text>
-          </View>
-          <View style={styles.featureItem}>
-            <Text style={styles.featureBullet}>✓</Text>
-            <Text style={styles.featureText}>Incident documentation</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Safety Tips */}
-      <View style={styles.tipsBox}>
-        <Text style={styles.tipsTitle}>💡 Daily Safety Tip</Text>
-        <Text style={styles.tipsText}>
-          Always share your location with trusted friends when traveling alone. Check in with them when you arrive safely.
-        </Text>
+          <Text style={styles.cardTitle}>AI Safety Chatbot</Text>
+          <Text style={styles.cardDescription}>Talk to your safety assistant</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -170,19 +123,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-  },
-  logoutButton: {
-    backgroundColor: '#ffebee',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ef5350',
-  },
-  logoutText: {
-    color: '#d32f2f',
-    fontWeight: 'bold',
-    fontSize: 13,
   },
   greeting: {
     fontSize: 14,
@@ -209,13 +149,20 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   cardsContainer: {
-    gap: 14,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
     marginBottom: 32,
   },
   card: {
+    width: '48%',
+    minHeight: 170,
     borderRadius: 16,
-    padding: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 18,
+    marginBottom: 14,
     alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -231,17 +178,14 @@ const styles = StyleSheet.create({
   reportCard: {
     backgroundColor: '#ff9800',
   },
-  callCard: {
-    backgroundColor: '#9c27b0',
-  },
   contactsCard: {
     backgroundColor: '#4caf50',
   },
-  kioskCard: {
-    backgroundColor: '#d32f2f',
-  },
   officerCard: {
     backgroundColor: '#3f51b5',
+  },
+  chatCard: {
+    backgroundColor: '#6a1b9a',
   },
   cardIconContainer: {
     marginBottom: 12,
@@ -254,60 +198,15 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 6,
+    textAlign: 'center',
+    flexShrink: 1,
   },
   cardDescription: {
-    fontSize: 13,
+    fontSize: 12.5,
     color: 'rgba(255, 255, 255, 0.85)',
     textAlign: 'center',
     lineHeight: 18,
+    flexShrink: 1,
   },
-  featuresSection: {
-    marginBottom: 24,
-  },
-  featuresList: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  featureBullet: {
-    fontSize: 16,
-    color: '#4caf50',
-    fontWeight: 'bold',
-    marginTop: 2,
-  },
-  featureText: {
-    fontSize: 13,
-    color: '#555',
-    flex: 1,
-    lineHeight: 18,
-  },
-  tipsBox: {
-    backgroundColor: '#fff3e0',
-    borderRadius: 12,
-    padding: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#ff9800',
-  },
-  tipsTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#e65100',
-    marginBottom: 8,
-  },
-  tipsText: {
-    fontSize: 13,
-    color: '#d84315',
-    lineHeight: 18,
-  },
+
 });
