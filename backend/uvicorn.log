@@ -16,3 +16,205 @@ INFO:     127.0.0.1:56240 - "GET /api/chat/health HTTP/1.1" 200 OK
 INFO:     10.135.15.223:57496 - "GET / HTTP/1.1" 200 OK
 INFO:     10.135.15.223:57496 - "POST /api/v1/chat HTTP/1.1" 200 OK
 INFO:     10.135.15.223:57506 - "POST /api/v1/chat HTTP/1.1" 200 OK
+INFO:     10.135.15.223:58008 - "GET / HTTP/1.1" 200 OK
+INFO:     10.135.15.223:58008 - "GET /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58014 - "PUT /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58014 - "PUT /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58016 - "GET /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58080 - "GET / HTTP/1.1" 200 OK
+INFO:     10.135.15.223:58080 - "GET /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58096 - "GET / HTTP/1.1" 200 OK
+INFO:     10.135.15.223:58096 - "GET /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58104 - "PUT /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58106 - "PUT /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58458 - "GET / HTTP/1.1" 200 OK
+INFO:     10.135.15.223:58464 - "GET /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58464 - "PUT /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58472 - "PUT /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58472 - "PUT /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58474 - "PUT /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58476 - "PUT /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58476 - "PUT /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58478 - "GET /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58542 - "PUT /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:58542 - "PUT /api/v1/emergency-contacts HTTP/1.1" 401 Unauthorized
+INFO:     10.135.15.223:59176 - "GET / HTTP/1.1" 200 OK
+INFO:     10.135.15.223:59176 - "GET / HTTP/1.1" 200 OK
+INFO:     10.135.15.223:59226 - "GET / HTTP/1.1" 200 OK
+2026-10-15 06:47:56,858 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:47:56,890 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.email = ?
+2026-10-15 06:47:56,892 INFO sqlalchemy.engine.Engine [generated in 0.00318s] ('anu2026@gmail.com',)
+INFO:     10.135.15.223:59232 - "POST /api/v1/auth/login HTTP/1.1" 200 OK
+2026-10-15 06:47:56,921 INFO sqlalchemy.engine.Engine ROLLBACK
+2026-10-15 06:48:00,437 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:48:00,450 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:48:00,450 INFO sqlalchemy.engine.Engine [generated in 0.00158s] (15,)
+2026-10-15 06:48:00,455 INFO sqlalchemy.engine.Engine SELECT emergency_contacts.id, emergency_contacts.user_id, emergency_contacts.name, emergency_contacts.phone, emergency_contacts.relationship, emergency_contacts.priority, emergency_contacts.push_token 
+FROM emergency_contacts 
+WHERE emergency_contacts.user_id = ? ORDER BY emergency_contacts.priority
+2026-10-15 06:48:00,457 INFO sqlalchemy.engine.Engine [generated in 0.00106s] (15,)
+INFO:     10.135.15.223:59232 - "GET /api/v1/emergency-contacts HTTP/1.1" 200 OK
+2026-10-15 06:48:00,459 INFO sqlalchemy.engine.Engine ROLLBACK
+2026-10-15 06:48:15,030 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:48:15,036 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:48:15,037 INFO sqlalchemy.engine.Engine [cached since 14.59s ago] (15,)
+2026-10-15 06:48:15,041 INFO sqlalchemy.engine.Engine ROLLBACK
+INFO:     10.135.15.223:59238 - "PUT /api/v1/emergency-contacts HTTP/1.1" 422 Unprocessable Entity
+2026-10-15 06:48:52,726 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:48:52,735 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:48:52,739 INFO sqlalchemy.engine.Engine [cached since 52.29s ago] (15,)
+2026-10-15 06:48:52,745 INFO sqlalchemy.engine.Engine DELETE FROM emergency_contacts WHERE emergency_contacts.user_id = ?
+2026-10-15 06:48:52,745 INFO sqlalchemy.engine.Engine [generated in 0.00147s] (15,)
+2026-10-15 06:48:52,751 INFO sqlalchemy.engine.Engine INSERT INTO emergency_contacts (user_id, name, phone, relationship, priority, push_token) VALUES (?, ?, ?, ?, ?, ?) RETURNING id
+2026-10-15 06:48:52,751 INFO sqlalchemy.engine.Engine [generated in 0.00070s (insertmanyvalues) 1/3 (ordered; batch not supported)] (15, 'Darshan', '7411489233', 'Friend', 1, None)
+2026-10-15 06:48:52,758 INFO sqlalchemy.engine.Engine INSERT INTO emergency_contacts (user_id, name, phone, relationship, priority, push_token) VALUES (?, ?, ?, ?, ?, ?) RETURNING id
+2026-10-15 06:48:52,758 INFO sqlalchemy.engine.Engine [insertmanyvalues 2/3 (ordered; batch not supported)] (15, 'Srinivas', '9535094223', "Father's", 2, None)
+2026-10-15 06:48:52,759 INFO sqlalchemy.engine.Engine INSERT INTO emergency_contacts (user_id, name, phone, relationship, priority, push_token) VALUES (?, ?, ?, ?, ?, ?) RETURNING id
+2026-10-15 06:48:52,760 INFO sqlalchemy.engine.Engine [insertmanyvalues 3/3 (ordered; batch not supported)] (15, 'Lakshmi', '9611006347', 'Mother', 3, None)
+2026-10-15 06:48:52,761 INFO sqlalchemy.engine.Engine COMMIT
+2026-10-15 06:48:52,768 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:48:52,769 INFO sqlalchemy.engine.Engine SELECT emergency_contacts.id, emergency_contacts.user_id, emergency_contacts.name, emergency_contacts.phone, emergency_contacts.relationship, emergency_contacts.priority, emergency_contacts.push_token 
+FROM emergency_contacts 
+WHERE emergency_contacts.id = ?
+2026-10-15 06:48:52,769 INFO sqlalchemy.engine.Engine [generated in 0.00124s] (1,)
+2026-10-15 06:48:52,774 INFO sqlalchemy.engine.Engine SELECT emergency_contacts.id, emergency_contacts.user_id, emergency_contacts.name, emergency_contacts.phone, emergency_contacts.relationship, emergency_contacts.priority, emergency_contacts.push_token 
+FROM emergency_contacts 
+WHERE emergency_contacts.id = ?
+2026-10-15 06:48:52,774 INFO sqlalchemy.engine.Engine [cached since 0.00451s ago] (2,)
+2026-10-15 06:48:52,774 INFO sqlalchemy.engine.Engine SELECT emergency_contacts.id, emergency_contacts.user_id, emergency_contacts.name, emergency_contacts.phone, emergency_contacts.relationship, emergency_contacts.priority, emergency_contacts.push_token 
+FROM emergency_contacts 
+WHERE emergency_contacts.id = ?
+2026-10-15 06:48:52,774 INFO sqlalchemy.engine.Engine [cached since 0.007196s ago] (3,)
+INFO:     10.135.15.223:59244 - "PUT /api/v1/emergency-contacts HTTP/1.1" 200 OK
+2026-10-15 06:48:52,774 INFO sqlalchemy.engine.Engine ROLLBACK
+2026-10-15 06:48:57,317 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:48:57,327 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:48:57,328 INFO sqlalchemy.engine.Engine [cached since 56.88s ago] (15,)
+2026-10-15 06:48:57,330 INFO sqlalchemy.engine.Engine SELECT emergency_contacts.id, emergency_contacts.user_id, emergency_contacts.name, emergency_contacts.phone, emergency_contacts.relationship, emergency_contacts.priority, emergency_contacts.push_token 
+FROM emergency_contacts 
+WHERE emergency_contacts.user_id = ? ORDER BY emergency_contacts.priority
+2026-10-15 06:48:57,331 INFO sqlalchemy.engine.Engine [cached since 56.87s ago] (15,)
+INFO:     10.135.15.223:59244 - "GET /api/v1/emergency-contacts HTTP/1.1" 200 OK
+2026-10-15 06:48:57,333 INFO sqlalchemy.engine.Engine ROLLBACK
+2026-10-15 06:49:12,029 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:49:12,040 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:49:12,040 INFO sqlalchemy.engine.Engine [cached since 71.59s ago] (15,)
+2026-10-15 06:49:12,040 INFO sqlalchemy.engine.Engine ROLLBACK
+INFO:     10.135.15.223:59246 - "PUT /api/v1/emergency-contacts HTTP/1.1" 422 Unprocessable Entity
+2026-10-15 06:49:17,727 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:49:17,735 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:49:17,735 INFO sqlalchemy.engine.Engine [cached since 77.29s ago] (15,)
+2026-10-15 06:49:17,738 INFO sqlalchemy.engine.Engine ROLLBACK
+INFO:     10.135.15.223:59248 - "PUT /api/v1/emergency-contacts HTTP/1.1" 422 Unprocessable Entity
+2026-10-15 06:49:20,210 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:49:20,221 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:49:20,221 INFO sqlalchemy.engine.Engine [cached since 79.77s ago] (15,)
+2026-10-15 06:49:20,225 INFO sqlalchemy.engine.Engine ROLLBACK
+INFO:     10.135.15.223:59248 - "PUT /api/v1/emergency-contacts HTTP/1.1" 422 Unprocessable Entity
+2026-10-15 06:49:24,524 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:49:24,542 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:49:24,542 INFO sqlalchemy.engine.Engine [cached since 84.09s ago] (15,)
+2026-10-15 06:49:24,542 INFO sqlalchemy.engine.Engine ROLLBACK
+INFO:     10.135.15.223:59248 - "PUT /api/v1/emergency-contacts HTTP/1.1" 422 Unprocessable Entity
+2026-10-15 06:49:27,216 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:49:27,224 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:49:27,227 INFO sqlalchemy.engine.Engine [cached since 86.78s ago] (15,)
+2026-10-15 06:49:27,229 INFO sqlalchemy.engine.Engine SELECT emergency_contacts.id, emergency_contacts.user_id, emergency_contacts.name, emergency_contacts.phone, emergency_contacts.relationship, emergency_contacts.priority, emergency_contacts.push_token 
+FROM emergency_contacts 
+WHERE emergency_contacts.user_id = ? ORDER BY emergency_contacts.priority
+2026-10-15 06:49:27,229 INFO sqlalchemy.engine.Engine [cached since 86.77s ago] (15,)
+INFO:     10.135.15.223:59248 - "GET /api/v1/emergency-contacts HTTP/1.1" 200 OK
+2026-10-15 06:49:27,237 INFO sqlalchemy.engine.Engine ROLLBACK
+2026-10-15 06:50:19,031 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:50:19,039 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:50:19,039 INFO sqlalchemy.engine.Engine [cached since 138.6s ago] (15,)
+2026-10-15 06:50:19,039 INFO sqlalchemy.engine.Engine ROLLBACK
+INFO:     10.135.15.223:59250 - "PUT /api/v1/emergency-contacts HTTP/1.1" 422 Unprocessable Entity
+2026-10-15 06:50:25,514 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:50:25,524 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:50:25,525 INFO sqlalchemy.engine.Engine [cached since 145.1s ago] (15,)
+2026-10-15 06:50:25,527 INFO sqlalchemy.engine.Engine DELETE FROM emergency_contacts WHERE emergency_contacts.user_id = ?
+2026-10-15 06:50:25,527 INFO sqlalchemy.engine.Engine [cached since 92.78s ago] (15,)
+2026-10-15 06:50:25,531 INFO sqlalchemy.engine.Engine INSERT INTO emergency_contacts (user_id, name, phone, relationship, priority, push_token) VALUES (?, ?, ?, ?, ?, ?) RETURNING id
+2026-10-15 06:50:25,532 INFO sqlalchemy.engine.Engine [cached since 92.78s ago (insertmanyvalues) 1/3 (ordered; batch not supported)] (15, 'Darshan', '7411489233', 'Friend', 1, None)
+2026-10-15 06:50:25,533 INFO sqlalchemy.engine.Engine INSERT INTO emergency_contacts (user_id, name, phone, relationship, priority, push_token) VALUES (?, ?, ?, ?, ?, ?) RETURNING id
+2026-10-15 06:50:25,533 INFO sqlalchemy.engine.Engine [insertmanyvalues 2/3 (ordered; batch not supported)] (15, 'Srinivas', '9535094223', "Father's", 2, None)
+2026-10-15 06:50:25,534 INFO sqlalchemy.engine.Engine INSERT INTO emergency_contacts (user_id, name, phone, relationship, priority, push_token) VALUES (?, ?, ?, ?, ?, ?) RETURNING id
+2026-10-15 06:50:25,535 INFO sqlalchemy.engine.Engine [insertmanyvalues 3/3 (ordered; batch not supported)] (15, 'Lakshmi', '9611006347', 'Mother', 3, None)
+2026-10-15 06:50:25,536 INFO sqlalchemy.engine.Engine COMMIT
+2026-10-15 06:50:25,540 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:50:25,541 INFO sqlalchemy.engine.Engine SELECT emergency_contacts.id, emergency_contacts.user_id, emergency_contacts.name, emergency_contacts.phone, emergency_contacts.relationship, emergency_contacts.priority, emergency_contacts.push_token 
+FROM emergency_contacts 
+WHERE emergency_contacts.id = ?
+2026-10-15 06:50:25,541 INFO sqlalchemy.engine.Engine [cached since 92.77s ago] (1,)
+2026-10-15 06:50:25,543 INFO sqlalchemy.engine.Engine SELECT emergency_contacts.id, emergency_contacts.user_id, emergency_contacts.name, emergency_contacts.phone, emergency_contacts.relationship, emergency_contacts.priority, emergency_contacts.push_token 
+FROM emergency_contacts 
+WHERE emergency_contacts.id = ?
+2026-10-15 06:50:25,544 INFO sqlalchemy.engine.Engine [cached since 92.77s ago] (2,)
+2026-10-15 06:50:25,546 INFO sqlalchemy.engine.Engine SELECT emergency_contacts.id, emergency_contacts.user_id, emergency_contacts.name, emergency_contacts.phone, emergency_contacts.relationship, emergency_contacts.priority, emergency_contacts.push_token 
+FROM emergency_contacts 
+WHERE emergency_contacts.id = ?
+2026-10-15 06:50:25,547 INFO sqlalchemy.engine.Engine [cached since 92.78s ago] (3,)
+INFO:     10.135.15.223:59252 - "PUT /api/v1/emergency-contacts HTTP/1.1" 200 OK
+2026-10-15 06:50:25,549 INFO sqlalchemy.engine.Engine ROLLBACK
+2026-10-15 06:50:55,150 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:50:55,164 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:50:55,164 INFO sqlalchemy.engine.Engine [cached since 174.7s ago] (15,)
+2026-10-15 06:50:55,168 INFO sqlalchemy.engine.Engine SELECT emergency_contacts.id, emergency_contacts.user_id, emergency_contacts.name, emergency_contacts.phone, emergency_contacts.relationship, emergency_contacts.priority, emergency_contacts.push_token 
+FROM emergency_contacts 
+WHERE emergency_contacts.user_id = ? ORDER BY emergency_contacts.priority
+2026-10-15 06:50:55,168 INFO sqlalchemy.engine.Engine [cached since 174.7s ago] (15,)
+INFO:     10.135.15.223:59254 - "GET /api/v1/emergency-contacts HTTP/1.1" 200 OK
+2026-10-15 06:50:55,168 INFO sqlalchemy.engine.Engine ROLLBACK
+2026-10-15 06:50:59,047 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:50:59,056 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:50:59,057 INFO sqlalchemy.engine.Engine [cached since 178.6s ago] (15,)
+2026-10-15 06:50:59,060 INFO sqlalchemy.engine.Engine ROLLBACK
+INFO:     10.135.15.223:59254 - "PUT /api/v1/emergency-contacts HTTP/1.1" 422 Unprocessable Entity
+2026-10-15 06:51:01,547 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:51:01,550 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:51:01,552 INFO sqlalchemy.engine.Engine [cached since 181.1s ago] (15,)
+2026-10-15 06:51:01,553 INFO sqlalchemy.engine.Engine ROLLBACK
+INFO:     10.135.15.223:59254 - "PUT /api/v1/emergency-contacts HTTP/1.1" 422 Unprocessable Entity
+2026-10-15 06:51:04,745 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-10-15 06:51:04,753 INFO sqlalchemy.engine.Engine SELECT users.id, users.name, users.email, users.phone, users.hashed_password, users.is_active, users.is_admin 
+FROM users 
+WHERE users.id = ? AND users.is_active IS 1
+2026-10-15 06:51:04,753 INFO sqlalchemy.engine.Engine [cached since 184.3s ago] (15,)
+2026-10-15 06:51:04,755 INFO sqlalchemy.engine.Engine SELECT emergency_contacts.id, emergency_contacts.user_id, emergency_contacts.name, emergency_contacts.phone, emergency_contacts.relationship, emergency_contacts.priority, emergency_contacts.push_token 
+FROM emergency_contacts 
+WHERE emergency_contacts.user_id = ? ORDER BY emergency_contacts.priority
+2026-10-15 06:51:04,757 INFO sqlalchemy.engine.Engine [cached since 184.3s ago] (15,)
+INFO:     10.135.15.223:59254 - "GET /api/v1/emergency-contacts HTTP/1.1" 200 OK
+2026-10-15 06:51:04,760 INFO sqlalchemy.engine.Engine ROLLBACK
+INFO:     127.0.0.1:57962 - "GET / HTTP/1.1" 200 OK

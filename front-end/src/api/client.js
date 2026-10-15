@@ -19,8 +19,10 @@ client.interceptors.request.use(async config => {
   const raw = await AsyncStorage.getItem('USER_SESSION');
   if (raw) {
     const session = JSON.parse(raw);
-    const token = session.token || session.access_token;
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    const token = session.access_token ?? session.token;
+    if (typeof token === 'string' && token.split('.').length === 3) {
+      config.headers.Authorization = `${session.token_type || 'Bearer'} ${token}`;
+    }
   }
   return config;
 });

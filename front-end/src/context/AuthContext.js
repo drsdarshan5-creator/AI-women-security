@@ -3,6 +3,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const USER_SESSION_KEY = 'USER_SESSION';
 
+const getSessionToken = (session) => {
+  const token = session?.access_token ?? session?.token ?? session?.accessToken ?? session?.authToken;
+  return typeof token === 'string' && token.split('.').length === 3 ? token : null;
+};
+
 // Create and export the Context
 export const AuthContext = createContext();
 
@@ -17,14 +22,13 @@ export const AuthProvider = ({ children }) => {
         const raw = await AsyncStorage.getItem(USER_SESSION_KEY);
         if (raw) {
           const session = JSON.parse(raw);
-          // Ensure we extract a valid token or fallback string
-          const resolvedToken =
-            session.token ??
-            session.access_token ??
-            (session.user ? 'authenticated_user' : null);
+          const resolvedToken = getSessionToken(session);
 
           setUserToken(resolvedToken);
-          setUser(session.user ?? null);
+          setUser(resolvedToken ? session.user ?? null : null);
+          if (!resolvedToken) {
+            await AsyncStorage.removeItem(USER_SESSION_KEY);
+          }
         } else {
           setUserToken(null);
           setUser(null);
@@ -41,12 +45,12 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (session = {}) => {
-    const token =
-      session.access_token ??
-      session.token ??
-      session.accessToken ??
-      session.authToken ??
-      (typeof session === 'string' ? session : 'authenticated_user');
+    const token = getSessionToken(
+      typeof session === 'string' ? { token: session } : session,
+    );
+    if (!token) {
+      throw new Error('The sign-in response did not include a valid access token.');
+    }
 
     const userPayload = session.user ?? session.userDetails ?? session.user_data ?? session;
 
@@ -55,7 +59,7 @@ export const AuthProvider = ({ children }) => {
     try {
       await AsyncStorage.setItem(
         USER_SESSION_KEY,
-        JSON.stringify({ token, user: userPayload }),
+        JSON.stringify({ access_token: token, token, user: userPayload }),
       );
     } catch (error) {
       console.warn('Failed to persist auth session:', error);

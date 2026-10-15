@@ -73,7 +73,7 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.cardIcon}>👥</Text>
           </View>
           <Text style={styles.cardTitle}>Emergency Contacts</Text>
-          <Text style={styles.cardDescription}>Manage your 3 priority contacts</Text>
+          <Text style={styles.cardDescription}>Manage 1 to 3 priority contacts</Text>
         </TouchableOpacity>
 
         {/* Officer Evidence Portal */}

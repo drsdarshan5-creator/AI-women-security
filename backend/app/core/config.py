@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import List
 
-from pydantic import AnyHttpUrl, validator
+from pydantic import AnyHttpUrl, Field, validator
 from pydantic_settings import BaseSettings
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -9,7 +9,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "AI Women's Security"
-    DEBUG: bool = True
+    # Avoid colliding with generic environment variables such as DEBUG=release.
+    DEBUG: bool = Field(default=True, validation_alias="APP_DEBUG")
 
     BACKEND_CORS_ORIGINS: List[AnyHttpUrl] = [
         "http://localhost",

@@ -26,13 +26,13 @@ class ContactEntry(BaseModel):
 
 
 class EmergencyContactsUpdateRequest(BaseModel):
-    contacts: list[ContactEntry] = Field(min_length=3, max_length=3)
+    contacts: list[ContactEntry] = Field(max_length=3)
 
     @model_validator(mode="after")
     def validate_unique_phone_numbers(self):
         phone_numbers = [contact.phone_number for contact in self.contacts]
-        if len(set(phone_numbers)) != 3:
-            raise ValueError("Emergency contacts must have 3 unique phone numbers.")
+        if len(set(phone_numbers)) != len(phone_numbers):
+            raise ValueError("Emergency contacts must have unique phone numbers.")
         return self
 
 

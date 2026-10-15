@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -10,6 +11,32 @@ import {
 } from 'react-native';
 import client from '../api/client';
 import { API_ORIGIN } from '../api/config';
+
+const getContactsStorageKey = async () => {
+  const rawSession = await AsyncStorage.getItem('USER_SESSION');
+  const session = rawSession ? JSON.parse(rawSession) : {};
+  const userKey = session.user?.id ?? session.user?.email ?? session.token ?? 'default';
+  return `EMERGENCY_CONTACTS:${userKey}`;
+};
+
+const readCachedContacts = async () => {
+  const stored = await AsyncStorage.getItem(await getContactsStorageKey());
+  if (!stored) return null;
+
+  const cached = JSON.parse(stored);
+  if (Array.isArray(cached)) {
+    return { contacts: cached, pendingSync: cached.length > 0 };
+  }
+  if (Array.isArray(cached?.contacts)) return cached;
+  return null;
+};
+
+const writeCachedContacts = async (contacts, pendingSync = false) => {
+  await AsyncStorage.setItem(
+    await getContactsStorageKey(),
+    JSON.stringify({ contacts, pendingSync }),
+  );
+};
 
 const makeEmptyContact = () => ({
   id: `${Date.now()}-${Math.random()}`,
@@ -27,19 +54,84 @@ export default function EmergencyContactsScreen() {
   }, []);
 
   const loadUserContacts = async () => {
+    let cached = null;
+    try {
+      cached = await readCachedContacts();
+    } catch (storageError) {
+      console.warn('Failed to read cached emergency contacts:', storageError);
+    }
+
     try {
       const response = await client.get('/emergency-contacts');
-      setUserContacts(Array.isArray(response.data) ? response.data : []);
+      let contacts = Array.isArray(response.data) ? response.data : [];
+
+      if (cached?.pendingSync) {
+        try {
+          const synced = await client.put('/emergency-contacts', {
+            contacts: cached.contacts.map(({ name, phone, relationship }) => ({
+              name,
+              phone_number: phone,
+              relationship,
+            })),
+          });
+          if (Array.isArray(synced.data)) contacts = synced.data;
+        } catch (syncError) {
+          console.warn('Failed to sync saved emergency contacts:', syncError);
+          contacts = cached.contacts;
+          setUserContacts(contacts);
+          return;
+        }
+      }
+
+      setUserContacts(contacts);
+      try {
+        await writeCachedContacts(contacts);
+      } catch (storageError) {
+        console.warn('Failed to cache loaded emergency contacts:', storageError);
+      }
     } catch (e) {
       console.warn('Failed to load emergency contacts:', e);
+      try {
+        const fallbackContacts = cached?.contacts ?? (await readCachedContacts())?.contacts ?? [];
+        setUserContacts(fallbackContacts);
+      } catch (storageError) {
+        console.warn('Failed to restore saved emergency contacts:', storageError);
+      }
     }
+  };
+
+  const persistContacts = async (contacts) => {
+    const payload = contacts.map(({ name, phone, relationship }) => ({
+      name: name.trim(),
+      phone_number: phone.trim(),
+      relationship: relationship.trim(),
+    }));
+
+    let response;
+    try {
+      response = await client.put('/emergency-contacts', { contacts: payload });
+    } catch (error) {
+      if (error?.response) throw error;
+      await writeCachedContacts(contacts, true);
+      setUserContacts(contacts);
+      return { contacts, offline: true, error };
+    }
+
+    const savedContacts = Array.isArray(response.data) ? response.data : contacts;
+    setUserContacts(savedContacts);
+    try {
+      await writeCachedContacts(savedContacts);
+    } catch (storageError) {
+      console.warn('Failed to cache saved emergency contacts:', storageError);
+    }
+    return { contacts: savedContacts, offline: false };
   };
 
   const handleSaveChanges = async () => {
     const errors = {};
 
-    if (userContacts.length !== 3) {
-      Alert.alert('Validation Error', 'Exactly 3 priority contacts are required.');
+    if (userContacts.length > 3) {
+      Alert.alert('Validation Error', 'You can save up to 3 priority contacts.');
       return;
     }
 
@@ -88,17 +180,13 @@ export default function EmergencyContactsScreen() {
 
     setValidationErrors({});
     try {
-      const response = await client.put('/emergency-contacts', {
-        contacts: userContacts.map(({ name, phone, relationship }) => ({
-          name: name.trim(),
-          phone_number: phone.trim(),
-          relationship: relationship.trim(),
-        })),
-      });
-      if (Array.isArray(response.data)) {
-        setUserContacts(response.data);
+      const result = await persistContacts(userContacts);
+      if (result.offline) {
+        const message = `Cannot reach the backend at ${API_ORIGIN}. Check that the phone and computer are on the same Wi-Fi and the backend is running.`;
+        Alert.alert('Saved on this device', `Contacts are stored on this device. The server could not be updated: ${message}`);
+      } else {
+        Alert.alert('Saved', 'Emergency contacts successfully updated.');
       }
-      Alert.alert('Saved', 'Emergency contacts successfully updated.');
     } catch (error) {
       const detail = error?.response?.data?.detail;
       const backendMessage = Array.isArray(detail)
@@ -106,11 +194,9 @@ export default function EmergencyContactsScreen() {
         : typeof detail === 'string'
           ? detail
           : error?.response?.data?.message;
-      const message = backendMessage || (
-        !error?.response
-          ? `Cannot reach the backend at ${API_ORIGIN}. Check that the phone and computer are on the same Wi-Fi and the backend is running.`
-          : 'Unable to save contacts. Please try again.'
-      );
+      const message = error?.response?.status === 401
+        ? 'Your session is invalid or expired. Go back to Home, log out, sign in again, and retry saving.'
+        : backendMessage || 'Unable to save contacts. Please try again.';
       Alert.alert('Save Failed', message);
     }
   };
@@ -140,7 +226,26 @@ export default function EmergencyContactsScreen() {
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: () => setUserContacts((prev) => prev.filter((_, i) => i !== index)),
+        onPress: async () => {
+          const remainingContacts = userContacts.filter((_, i) => i !== index);
+          try {
+            const result = await persistContacts(remainingContacts);
+            Alert.alert(
+              result.offline ? 'Removed on this device' : 'Deleted',
+              result.offline
+                ? 'The contact was removed on this device and will sync when the backend is available.'
+                : 'Emergency contact removed.',
+            );
+          } catch (error) {
+            const detail = error?.response?.data?.detail;
+            const message = Array.isArray(detail)
+              ? detail.map((item) => item.msg || item.message).filter(Boolean).join('\n')
+              : typeof detail === 'string'
+                ? detail
+                : 'Unable to remove the contact. Please try again.';
+            Alert.alert('Delete Failed', message);
+          }
+        },
       },
     ]);
   };
@@ -150,11 +255,14 @@ export default function EmergencyContactsScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>Emergency Contacts ({userContacts.length})</Text>
         <Text style={styles.subtitle}>
-          Contacts are stored securely on the backend and notified through configured emergency channels.
+          Save up to 3 contacts. Changes are kept on this device and synced to the backend when available.
         </Text>
       </View>
 
       {/* Customizable contacts */}
+      {userContacts.length === 0 && (
+        <Text style={styles.emptyText}>No emergency contacts saved. Add a contact if you want one.</Text>
+      )}
       {userContacts.map((contact, idx) => (
         <View key={contact.id} style={styles.card}>
           <View style={styles.cardHeader}>
@@ -221,6 +329,7 @@ const styles = StyleSheet.create({
   header: { marginBottom: 16 },
   title: { fontSize: 20, fontWeight: '700', color: '#1a1a1a', marginBottom: 4 },
   subtitle: { fontSize: 13, color: '#666' },
+  emptyText: { color: '#666', fontSize: 14, textAlign: 'center', paddingVertical: 24 },
   card: {
     backgroundColor: '#fff',
     borderRadius: 12,
