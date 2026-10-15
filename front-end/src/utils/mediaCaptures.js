@@ -1,4 +1,9 @@
-import { Audio } from 'expo-av';
+import {
+  getRecordingPermissionsAsync,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+} from 'expo-audio';
 import { Camera } from 'expo-camera';
 import { AppState, Platform } from 'react-native';
 
@@ -20,19 +25,11 @@ async function cleanupPreviousCapture(cameraRef) {
   // Unload any previous audio recording so the next capture starts from a clean state.
   if (activeAudioRecording) {
     try {
-      if (typeof activeAudioRecording.stopAndUnloadAsync === 'function') {
-        await activeAudioRecording.stopAndUnloadAsync();
+      if (activeAudioRecording.isRecording) {
+        await activeAudioRecording.stop();
       }
     } catch (error) {
       console.warn('[SOS Media] Could not stop previous audio recording:', error?.message || error);
-    }
-
-    try {
-      if (typeof activeAudioRecording.unloadAsync === 'function') {
-        await activeAudioRecording.unloadAsync();
-      }
-    } catch (error) {
-      console.warn('[SOS Media] Could not unload previous audio recording:', error?.message || error);
     }
 
     activeAudioRecording = null;
@@ -50,9 +47,9 @@ async function ensureCapturePermissions() {
     throw new Error('Camera permission is required to capture SOS evidence.');
   }
 
-  let micPermission = await Audio.getPermissionsAsync();
+  let micPermission = await getRecordingPermissionsAsync();
   if (micPermission.status !== 'granted') {
-    micPermission = await Audio.requestPermissionsAsync();
+    micPermission = await requestRecordingPermissionsAsync();
   }
 
   if (micPermission.status !== 'granted') {
@@ -64,12 +61,12 @@ async function ensureCapturePermissions() {
 
 async function keepEmergencyCaptureAlive() {
   // Prevent Android from immediately pausing the SOS capture task when the app briefly loses foreground focus.
-  // Expo AV allows the audio pipeline to remain active while the app is in an emergency state.
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: true,
-    playsInSilentModeIOS: true,
-    staysActiveInBackground: true,
-    shouldDuckAndroid: true,
+  await setAudioModeAsync({
+    allowsRecording: true,
+    playsInSilentMode: true,
+    shouldPlayInBackground: true,
+    allowsBackgroundRecording: true,
+    interruptionMode: 'duckOthers',
   });
 
   if (Platform.OS === 'android') {
@@ -80,29 +77,32 @@ async function keepEmergencyCaptureAlive() {
   }
 }
 
-async function captureAudioSnippet(durationMs = 8000) {
-  const recording = new Audio.Recording();
+async function captureAudioSnippet(recording, durationMs = 8000) {
+  if (!recording) {
+    throw new Error('Audio recorder is not available.');
+  }
+
   activeAudioRecording = recording;
 
   try {
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: true,
-      shouldDuckAndroid: true,
+    await setAudioModeAsync({
+      allowsRecording: true,
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      allowsBackgroundRecording: true,
+      interruptionMode: 'duckOthers',
     });
 
-    await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-    await recording.startAsync();
+    await recording.prepareToRecordAsync(RecordingPresets.HIGH_QUALITY);
+    recording.record();
 
     await delay(durationMs);
 
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
+    await recording.stop();
+    const uri = recording.uri;
     activeAudioRecording = null;
     return uri;
   } catch (error) {
-    activeAudioRecording = null;
     throw new Error(`Audio capture failed: ${error?.message || error}`);
   }
 }
@@ -148,7 +148,7 @@ async function captureVideo(cameraRef, maxDurationSeconds = 10) {
   return videoData?.uri || null;
 }
 
-export async function captureEmergencyMedia(cameraRef, photoCount = 6) {
+export async function captureEmergencyMedia(cameraRef, photoCount = 6, audioRecorder) {
   const mediaResults = {
     photos: [],
     videoUri: null,
@@ -184,7 +184,7 @@ export async function captureEmergencyMedia(cameraRef, photoCount = 6) {
 
     // Audio is the resilient fallback that should always work when the camera is unavailable or the device is busy.
     try {
-      mediaResults.audioUri = await captureAudioSnippet(8000);
+      mediaResults.audioUri = await captureAudioSnippet(audioRecorder, 8000);
       console.log('[SOS Media] Audio saved to:', mediaResults.audioUri);
     } catch (error) {
       const message = error?.message || error;
@@ -200,7 +200,7 @@ export async function captureEmergencyMedia(cameraRef, photoCount = 6) {
 
     // Final safety net: if the video/camera stack fails before capture, do not block the emergency flow. 
     try {
-      mediaResults.audioUri = await captureAudioSnippet(8000);
+      mediaResults.audioUri = await captureAudioSnippet(audioRecorder, 8000);
     } catch (fallbackError) {
       mediaResults.errors.push(`fallback:${fallbackError?.message || fallbackError}`);
       console.warn('[SOS Media] Fallback audio capture also failed:', fallbackError?.message || fallbackError);

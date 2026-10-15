@@ -1,4 +1,4 @@
-﻿﻿import React, { useContext, useEffect, useState, useRef } from 'react';
+﻿import React, { useContext, useEffect, useState, useRef } from 'react';
 import {
   Alert,
   ActivityIndicator,
@@ -14,30 +14,16 @@ import {
 import axios from 'axios';
 import { Ionicons } from '@expo/vector-icons';
 import { AuthContext } from '../context/AuthContext';
-
-// Local Wi-Fi API Base Host
-const API_HOST = 'http:// 10.254.61.187:8000';
-const API_PATH = '/api/v1/auth';
+import { API_HEALTH_URL, API_V1_URL } from '../api/config';
 
 const DEFAULT_REQUEST_TIMEOUT = 10000;
 
-// Axios helper with custom timeout and request handling
+// Use Axios's native timeout so React Native handles request cancellation.
 const axiosRequestWithTimeout = async (cfg, timeout = DEFAULT_REQUEST_TIMEOUT) => {
-  const controller = new AbortController();
-  const timerId = setTimeout(() => controller.abort(), timeout);
-  try {
-    const merged = {
-      ...cfg,
-      signal: controller.signal,
-      headers: {
-        ...(cfg.headers || {}),
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
-    };
-    return await axios(merged);
-  } finally {
-    clearTimeout(timerId);
-  }
+  return axios({
+    ...cfg,
+    timeout,
+  });
 };
 
 const validateEmail = (email) => {
@@ -67,7 +53,7 @@ export default function AuthScreen({ navigation }) {
 
   const [loading, setLoading] = useState(false);
 
-  const [apiBaseUrl, setApiBaseUrl] = useState(`${API_HOST}${API_PATH}`);
+  const apiBaseUrl = `${API_V1_URL}/auth`;
   const [backendResolved, setBackendResolved] = useState(false);
   const [backendDiscoveryLoading, setBackendDiscoveryLoading] = useState(true);
 
@@ -77,8 +63,6 @@ export default function AuthScreen({ navigation }) {
   const [availabilityChecking, setAvailabilityChecking] = useState(false);
   const [availabilityError, setAvailabilityError] = useState(null);
   const availabilityTimerRef = useRef(null);
-
-  const getApiUrl = () => apiBaseUrl;
 
   const toggleMode = (nextMode) => {
     setMode(nextMode);
@@ -95,11 +79,9 @@ export default function AuthScreen({ navigation }) {
   const detectBackend = async () => {
     setBackendDiscoveryLoading(true);
     setBackendResolved(false);
-    const healthUrl = `${API_HOST}/`;
     try {
-      const response = await axiosRequestWithTimeout({ method: 'get', url: healthUrl });
+      const response = await axiosRequestWithTimeout({ method: 'get', url: API_HEALTH_URL });
       if (response?.status === 200) {
-        setApiBaseUrl(`${API_HOST}${API_PATH}`);
         setBackendResolved(true);
         setBackendDiscoveryLoading(false);
         return true;
@@ -129,7 +111,7 @@ export default function AuthScreen({ navigation }) {
       const params = new URLSearchParams();
       if (emailToCheck) params.append('email', emailToCheck);
       if (phoneToCheck) params.append('phone', phoneToCheck);
-      const url = `${getApiUrl()}/check?${params.toString()}`;
+      const url = `${apiBaseUrl}/check?${params.toString()}`;
       const resp = await axiosRequestWithTimeout({ method: 'get', url });
       return resp?.data || {};
     } catch (err) {
@@ -168,7 +150,7 @@ export default function AuthScreen({ navigation }) {
 
     setLoading(true);
     try {
-      const currentUrl = getApiUrl();
+      const currentUrl = apiBaseUrl;
       const payload = {
         name: fullName.trim(),
         email: email.trim().toLowerCase(),
@@ -206,7 +188,7 @@ export default function AuthScreen({ navigation }) {
 
     setLoading(true);
     try {
-      const currentUrl = getApiUrl();
+      const currentUrl = apiBaseUrl;
       const response = await axiosRequestWithTimeout({ 
         method: 'post', 
         url: `${currentUrl}/login`, 
@@ -221,7 +203,11 @@ export default function AuthScreen({ navigation }) {
       if (backendMessage) {
         Alert.alert('Sign In Failed', String(backendMessage));
       } else {
-        Alert.alert('Sign In Failed', 'Unable to reach backend server. Check your connection.');
+        console.warn('Sign-in request failed:', error.code || error.message);
+        Alert.alert(
+          'Sign In Failed',
+          `Unable to reach backend server. ${error.message || 'Check your connection.'}`
+        );
       }
     } finally {
       setLoading(false);

@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import client from '../api/client';
+import { API_ORIGIN } from '../api/config';
 
 const QUICK_PROMPTS = [
   'I feel unsafe right now',
@@ -55,7 +56,7 @@ export default function ChatScreen() {
 
     try {
       const response = await client.post('/chat', { message: trimmed }, {
-        timeout: 20000,
+        timeout: 120000,
       });
 
       const assistantMessage = {
@@ -66,7 +67,11 @@ export default function ChatScreen() {
 
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
-      const serverDetail = error?.response?.data?.detail || error?.message || 'Unknown server error';
+      const serverDetail = error?.response?.data?.detail || (
+        !error?.response
+          ? `Cannot reach the backend at ${API_ORIGIN}. Check that the phone and computer are on the same Wi-Fi and the backend is running.`
+          : error?.message || 'Unknown server error'
+      );
       console.log('[ChatScreen] API request failed:', error);
 
       const errorMessage = {

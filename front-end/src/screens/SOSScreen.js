@@ -11,7 +11,12 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Accelerometer } from 'expo-sensors';
 import { Camera, CameraView } from 'expo-camera';
-import { Audio } from 'expo-av';
+import {
+  getRecordingPermissionsAsync,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  useAudioRecorder,
+} from 'expo-audio';
 import { getCurrentLocation } from '../services/locationService';
 import { captureEmergencyMedia } from '../utils/mediaCaptures';
 import { createEmergency } from '../services/emergencyService';
@@ -47,6 +52,7 @@ const SOSScreen = ({ navigation }) => {
   const [cameraPermission, setCameraPermission] = useState(false);
   const [microphonePermission, setMicrophonePermission] = useState(false);
   const cameraRef = useRef(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
 
   // Response/acknowledgement state
   const [responseAcknowledged, setResponseAcknowledged] = useState(false);
@@ -101,14 +107,14 @@ const SOSScreen = ({ navigation }) => {
     async function requestCapturePermissions() {
       try {
         let cameraResult = await Camera.getCameraPermissionsAsync();
-        let audioResult = await Audio.getPermissionsAsync();
+        let audioResult = await getRecordingPermissionsAsync();
 
         if (cameraResult.status !== 'granted') {
           cameraResult = await Camera.requestCameraPermissionsAsync();
         }
 
         if (audioResult.status !== 'granted') {
-          audioResult = await Audio.requestPermissionsAsync();
+          audioResult = await requestRecordingPermissionsAsync();
         }
 
         const cameraGranted = cameraResult.status === 'granted';
@@ -273,7 +279,7 @@ const SOSScreen = ({ navigation }) => {
       // Evidence Collection (photo/video/audio) must never block SOS workflow.
       try {
         setNotificationMessage('Capturing emergency multi-media evidence...');
-        const capturedMedia = await captureEmergencyMedia(cameraRef, 6);
+        const capturedMedia = await captureEmergencyMedia(cameraRef, 6, audioRecorder);
 
         const evidenceRecord = {
           id: `evidence-${Date.now()}`,

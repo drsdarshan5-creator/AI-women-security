@@ -11,15 +11,12 @@ import {
   Linking,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createAudioPlayer } from 'expo-audio';
+import { VideoView, useVideoPlayer } from 'expo-video';
 
-let AudioModule;
-let VideoModule;
-try {
-  AudioModule = require('expo-av').Audio;
-  VideoModule = require('expo-av').Video;
-} catch (e) {
-  AudioModule = null;
-  VideoModule = null;
+function EvidenceVideo({ uri, style }) {
+  const player = useVideoPlayer(uri);
+  return <VideoView player={player} style={style} nativeControls contentFit="contain" />;
 }
 
 const SOS_EVIDENCE_KEY = 'EMERGENCY_EVIDENCE_LOGS';
@@ -43,6 +40,7 @@ export default function OfficerEvidenceViewScreen() {
   const [selectedRecord, setSelectedRecord] = useState(null);
 
   const soundRef = useRef(null);
+  const playbackSubscriptionRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
@@ -50,9 +48,8 @@ export default function OfficerEvidenceViewScreen() {
 
     return () => {
       if (soundRef.current) {
-        try {
-          soundRef.current.unloadAsync && soundRef.current.unloadAsync();
-        } catch (e) {}
+        playbackSubscriptionRef.current?.remove();
+        soundRef.current.remove();
         soundRef.current = null;
       }
     };
@@ -163,29 +160,27 @@ export default function OfficerEvidenceViewScreen() {
   };
 
   const playAudio = async (uri) => {
-    if (!AudioModule) {
-      Alert.alert('Audio Unavailable', 'Audio playback is not available.');
-      return;
-    }
-
     try {
       if (soundRef.current) {
-        await soundRef.current.unloadAsync();
+        playbackSubscriptionRef.current?.remove();
+        soundRef.current.remove();
         soundRef.current = null;
       }
-      const { sound } = await AudioModule.Sound.createAsync({ uri });
-      soundRef.current = sound;
-      await sound.playAsync();
-      setIsPlaying(true);
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status && status.didJustFinish) {
+      const player = createAudioPlayer(uri);
+      soundRef.current = player;
+      playbackSubscriptionRef.current = player.addListener('playbackStatusUpdate', (status) => {
+        if (status.didJustFinish) {
           setIsPlaying(false);
-          try {
-            sound.unloadAsync();
-          } catch (e) {}
-          soundRef.current = null;
+          playbackSubscriptionRef.current?.remove();
+          playbackSubscriptionRef.current = null;
+          if (soundRef.current === player) {
+            soundRef.current = null;
+          }
+          player.remove();
         }
       });
+      player.play();
+      setIsPlaying(true);
     } catch (e) {
       console.warn('Audio play failed', e?.message || e);
       Alert.alert('Playback Failed', 'Unable to play audio.');
@@ -195,8 +190,10 @@ export default function OfficerEvidenceViewScreen() {
   const stopAudio = async () => {
     try {
       if (soundRef.current) {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
+        playbackSubscriptionRef.current?.remove();
+        playbackSubscriptionRef.current = null;
+        soundRef.current.pause();
+        soundRef.current.remove();
         soundRef.current = null;
       }
     } catch (e) {}
@@ -282,11 +279,7 @@ export default function OfficerEvidenceViewScreen() {
               <Text style={styles.detailText}>No audio available</Text>
             )}
             {record.videoUri ? (
-              VideoModule ? (
-                <VideoModule source={{ uri: record.videoUri }} style={styles.video} useNativeControls resizeMode="contain" />
-              ) : (
-                <TouchableOpacity onPress={() => Linking.openURL(record.videoUri)} style={styles.externalLink}><Text style={styles.externalLinkText}>Open Video</Text></TouchableOpacity>
-              )
+              <EvidenceVideo uri={record.videoUri} style={styles.video} />
             ) : (
               <Text style={styles.detailText}>No video available</Text>
             )}

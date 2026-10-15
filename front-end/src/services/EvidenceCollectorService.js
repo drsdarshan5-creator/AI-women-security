@@ -23,9 +23,14 @@ Notes/limitations:
 */
 
 import { Alert, Platform, Linking } from 'react-native';
+import {
+  getRecordingPermissionsAsync,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+} from 'expo-audio';
 
 let CameraModule;
-let AudioModule;
 let FileSystem;
 let MediaLibrary;
 
@@ -33,12 +38,6 @@ try {
   CameraModule = require('expo-camera');
 } catch (e) {
   CameraModule = null;
-}
-
-try {
-  AudioModule = require('expo-av');
-} catch (e) {
-  AudioModule = null;
 }
 
 try {
@@ -75,10 +74,11 @@ async function requestPermissions() {
   }
 
   try {
-    if (AudioModule && AudioModule.Audio) {
-      const micPerm = await AudioModule.Audio.requestPermissionsAsync?.() ?? await AudioModule.requestPermissionsAsync?.();
-      results.microphone = micPerm?.status === 'granted';
+    let micPerm = await getRecordingPermissionsAsync();
+    if (micPerm.status !== 'granted') {
+      micPerm = await requestRecordingPermissionsAsync();
     }
+    results.microphone = micPerm.status === 'granted';
   } catch (e) {
     console.warn('Microphone permission request failed', e?.message || e);
   }
@@ -95,28 +95,28 @@ async function requestPermissions() {
   return results;
 }
 
-async function recordAudioSnippet(seconds = 15) {
-  if (!AudioModule || !AudioModule.Audio) {
-    console.warn('expo-av not available for audio recording');
+async function recordAudioSnippet(recorder, seconds = 15) {
+  if (!recorder) {
+    console.warn('Audio recorder was not provided; skipping audio evidence recording');
     return null;
   }
 
   try {
-    const { Recording } = AudioModule;
-    await AudioModule.Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: true,
+    await setAudioModeAsync({
+      allowsRecording: true,
+      playsInSilentMode: true,
+      shouldPlayInBackground: true,
+      allowsBackgroundRecording: true,
+      interruptionMode: 'duckOthers',
     });
 
-    const recording = new Recording();
-    await recording.prepareToRecordAsync(AudioModule.Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
-    await recording.startAsync();
+    await recorder.prepareToRecordAsync(RecordingPresets.HIGH_QUALITY);
+    recorder.record();
 
     await wait(seconds * 1000);
 
-    await recording.stopAndUnloadAsync();
-    const uri = recording.getURI();
+    await recorder.stop();
+    const uri = recorder.uri;
     console.log('Audio recorded to', uri);
     return uri;
   } catch (e) {
@@ -233,7 +233,13 @@ const EvidenceCollector = {
   },
   // options: cameraRef (optional), audioSeconds, videoSeconds, recipients (array)
   startEvidenceCollection: async function (options = {}) {
-    const { cameraRef = null, audioSeconds = 15, videoSeconds = 8, recipients = [] } = options;
+    const {
+      cameraRef = null,
+      audioRecorder = null,
+      audioSeconds = 15,
+      videoSeconds = 8,
+      recipients = [],
+    } = options;
 
     // Request permissions
     const perms = await requestPermissions();
@@ -252,7 +258,7 @@ const EvidenceCollector = {
 
     // Start audio recording immediately (best-effort)
     if (perms.microphone) {
-      const audioUri = await recordAudioSnippet(audioSeconds);
+      const audioUri = await recordAudioSnippet(audioRecorder, audioSeconds);
       const localAudioUri = await saveToLocalAppStorage(audioUri, 'audio');
       collected.audioUri = localAudioUri || audioUri;
       if (perms.mediaLibrary) {

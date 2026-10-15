@@ -11,6 +11,10 @@
       "resizeMode": "cover",
       "backgroundColor": "#000000"
     },
+    "updates": {
+      "enabled": false,
+      "checkAutomatically": "NEVER"
+    },
     "plugins": [
       [
         "expo-splash-screen",
@@ -19,7 +23,14 @@
           "image": "./assets/portrait-bg.png",
           "resizeMode": "cover"
         }
-      ]
+      ],
+      [
+        "expo-audio",
+        {
+          "enableBackgroundRecording": true
+        }
+      ],
+      "expo-video"
     ],
     "android": {
       "package": "com.anonymous.aiwomensecurityapp",

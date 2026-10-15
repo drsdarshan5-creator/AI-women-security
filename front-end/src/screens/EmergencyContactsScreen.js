@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import client from '../api/client';
+import { API_ORIGIN } from '../api/config';
 
 const makeEmptyContact = () => ({
   id: `${Date.now()}-${Math.random()}`,
@@ -87,13 +88,16 @@ export default function EmergencyContactsScreen() {
 
     setValidationErrors({});
     try {
-      await client.put('/contacts', {
+      const response = await client.put('/emergency-contacts', {
         contacts: userContacts.map(({ name, phone, relationship }) => ({
           name: name.trim(),
           phone_number: phone.trim(),
           relationship: relationship.trim(),
         })),
       });
+      if (Array.isArray(response.data)) {
+        setUserContacts(response.data);
+      }
       Alert.alert('Saved', 'Emergency contacts successfully updated.');
     } catch (error) {
       const detail = error?.response?.data?.detail;
@@ -102,10 +106,12 @@ export default function EmergencyContactsScreen() {
         : typeof detail === 'string'
           ? detail
           : error?.response?.data?.message;
-      Alert.alert(
-        'Save Failed',
-        backendMessage || 'Unable to save contacts. Please try again.',
+      const message = backendMessage || (
+        !error?.response
+          ? `Cannot reach the backend at ${API_ORIGIN}. Check that the phone and computer are on the same Wi-Fi and the backend is running.`
+          : 'Unable to save contacts. Please try again.'
       );
+      Alert.alert('Save Failed', message);
     }
   };
 
@@ -172,7 +178,7 @@ export default function EmergencyContactsScreen() {
             <Text style={styles.fieldLabel}>Phone Number</Text>
             <TextInput
               style={[styles.input, validationErrors[`${idx}.phone`] && styles.inputError]}
-              placeholder="e.g. +1234567890"
+              placeholder="e.g. 9876543210 (10 digits)"
               keyboardType="phone-pad"
               value={contact.phone}
               onChangeText={(v) => updateContactField(idx, 'phone', v)}

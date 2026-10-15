@@ -248,23 +248,39 @@ async def chat_with_assistant(payload: ChatRequest):
     if genai is None or types is None:
         raise HTTPException(status_code=500, detail="google-genai is not installed.")
 
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model_name = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 
     try:
-        client = genai.Client(api_key=api_key)
+        # Do not inherit a machine-wide proxy implicitly. In particular, dev
+        # environments can export a placeholder proxy that is not running.
+        # Set GEMINI_PROXY_URL explicitly when this backend needs a proxy.
+        client_args = {"trust_env": False}
+        proxy_url = os.getenv("GEMINI_PROXY_URL")
+        if proxy_url:
+            client_args["proxy"] = proxy_url
+        client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(client_args=client_args, timeout=120_000),
+        )
         system_instruction = (
             "You are a calm, helpful, and empowering Women Safety Assistant. "
             "Give practical advice on personal safety, emergency preparedness, legal rights, "
             "domestic safety, harassment prevention, documentation strategies, immediate actions, "
             "and how to contact trusted help. Keep responses reassuring, clear, and actionable. "
             "Avoid judgmental language. Encourage reaching out to trusted people, local authorities, "
-            "or emergency services when the situation is urgent."
+            "or emergency services when the situation is urgent. Do not invent local laws, phone numbers, "
+            "or facts. Ask for the user's country or region when location-specific guidance is needed, "
+            "and clearly label general information versus legal advice."
         )
 
         response = client.models.generate_content(
             model=model_name,
             contents=message,
-            config=types.GenerateContentConfig(system_instruction=system_instruction),
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                max_output_tokens=800,
+                temperature=0.2,
+            ),
         )
         reply = getattr(response, "text", None) or "I’m here to help. Please share your situation and I’ll offer practical guidance."
         return {"reply": reply.strip()}

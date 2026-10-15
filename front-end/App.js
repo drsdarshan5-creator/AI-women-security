@@ -1,7 +1,8 @@
-import React, { useContext } from 'react';
+import React, { useContext, useEffect } from 'react';
 import { TouchableOpacity, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import * as SplashScreen from 'expo-splash-screen';
 
 // Correct imports matching your actual folder tree
 import { AuthProvider, AuthContext } from './src/context/AuthContext';
@@ -101,6 +102,12 @@ function Navigation() {
 }
 
 export default function App() {
+  useEffect(() => {
+    SplashScreen.hideAsync().catch((error) => {
+      console.warn('Failed to hide splash screen:', error);
+    });
+  }, []);
+
   return (
     <AuthProvider>
       <Navigation />

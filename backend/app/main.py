@@ -32,7 +32,7 @@ except Exception as exc:  # pragma: no cover
 
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 
 
 app = FastAPI(
@@ -77,21 +77,36 @@ async def api_chat(payload: ChatRequest):
         raise HTTPException(status_code=500, detail="google-genai is not installed or failed to import.")
 
     try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
+        # Avoid silently using an invalid machine-wide proxy. Configure
+        # GEMINI_PROXY_URL explicitly when the server requires a proxy.
+        client_args = {"trust_env": False}
+        proxy_url = os.getenv("GEMINI_PROXY_URL")
+        if proxy_url:
+            client_args["proxy"] = proxy_url
+        client = genai.Client(
+            api_key=GEMINI_API_KEY,
+            http_options=types.HttpOptions(client_args=client_args, timeout=120_000),
+        )
         system_instruction = (
             "You are a calm, helpful, and empowering Women Safety Assistant. "
             "Give practical advice on personal safety, emergency preparedness, legal rights, "
             "domestic safety, harassment prevention, documentation strategies, immediate actions, "
             "and how to contact trusted help. Keep responses reassuring, clear, and actionable. "
             "Avoid judgmental language. Encourage reaching out to trusted people, local authorities, "
-            "or emergency services when the situation is urgent."
+            "or emergency services when the situation is urgent. Do not invent local laws, phone numbers, "
+            "or facts. Ask for the user's country or region when location-specific guidance is needed, "
+            "and clearly label general information versus legal advice."
         )
 
         logger.info("Calling Gemini model %s for chat response.", GEMINI_MODEL)
         response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=message,
-            config=types.GenerateContentConfig(system_instruction=system_instruction),
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                max_output_tokens=800,
+                temperature=0.2,
+            ),
         )
 
         reply = getattr(response, "text", None) or str(response)
